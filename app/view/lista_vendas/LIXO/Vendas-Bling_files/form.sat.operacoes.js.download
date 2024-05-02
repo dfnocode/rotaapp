@@ -1,0 +1,172 @@
+var pathEnt = '';
+var pathSai = '';
+
+function setPathEnt(id) {
+	pathEnt = id;
+}
+
+function setPathSai(id) {
+	pathSai = id;
+}
+
+function enviarComando(comando, callback) {
+	var ent = $('#' + pathEnt.replace(/:/g, '\\:')).val();
+	var sai = $('#' + pathSai.replace(/:/g, '\\:')).val();
+	if (ent == undefined) {
+		callback({'error': 'Caminho do arquivo de entrada incorreto. Revise suas configurações.'});
+		return false;
+	}
+	if (sai == undefined) {
+		callback({'error': 'Caminho do arquivo de saída incorreto. Revise suas configurações.'});
+		return false;
+	}
+	var jc = new JavaConnection('appJava', 'SAT').getInstance();
+	var retorno = null;
+	jc.sendToPrinter([{"conteudo": 'SAT.Inicializar',"pathEnt": ent,"pathSai": sai}], function(err, data){
+		if (err) {
+			callback({'error':data});
+			return false;
+		} else {
+			if (data.indexOf('OK: ') != 0) {
+				callback({'error': data});
+				return false;
+			} else {
+				console.log('--- Comando enviado para ACBr: ---');
+				console.log(comando);
+				jc.sendToPrinter([{"conteudo": comando,"pathEnt": ent,"pathSai": sai}], function(err, data) {
+					if(err){
+						callback({'error': data});
+						return false;
+					} else {
+						if (data.indexOf('OK: ') != 0) {
+							callback({'error': data});
+							return false;
+						} else {
+							callback({'error': '', 'data': processarStringSat(data)});
+							return true;
+						}
+					}
+				});
+			}
+		}
+	});
+}
+
+function processarStringSat(string) {
+	var array = string.split('\n');
+	var obj = {};
+	$.each(array, function(key, linha) {
+		if (key == 0) {
+			if (linha.indexOf('OK: ') == 0) {
+				return true;
+			}
+		}
+		var index = linha.indexOf('=');
+		obj[linha.substring(0, index).trim()] = linha.substring(index+1).trim();
+	});
+	if (typeof obj.CodigoDeRetorno != 'undefined') {
+		obj.codigoDeRetorno = obj.CodigoDeRetorno;
+		delete obj.CodigoDeRetorno;
+	}
+	return obj;
+}
+
+function enviarSat(idVenda, tipoEnvio, callback) {
+	xajax_gerarSat(idVenda, tipoEnvio, function(retorno) {
+		if (retorno.error != '' && retorno.error != undefined) {
+			callback(retorno);
+			return false;
+		}
+		if (tipoEnvio == 'arquivo') {
+			enviarComando('SAT.EnviarCFe(' + retorno.xml + ')', function(ret) {
+				var obj = {};
+				obj.error = ret.error;
+				if (ret.error == '') {
+					obj.codigoDeRetorno = ret.data.codigoDeRetorno;
+					if (ret.data.codigoDeRetorno == 6000) {
+						obj.arquivo = ret.data.Arquivo;
+						xajax_alterarCfe(idVenda, {'arquivoCfe' : obj.arquivo});
+					} else {
+						obj.aviso = 'Informações incorretas no XML';
+						obj.xml = retorno.xml;
+					}
+				}
+				callback(obj);
+				return false;
+			});
+		} else if (retorno.executeLocalCall) {
+			return enviarCurlLocal(retorno)
+				.success(function(callResponse) {
+					if (callResponse instanceof XMLDocument) {
+						callResponse = {
+							result: {
+								code: $(callResponse).find('code').text() || 0
+							}
+						};
+					}
+
+					xajax_atualizarVendaPorRetornoCallback(idVenda, callResponse, function(res) {
+						if (!res.error) {
+							return callback({error: '', codigoDeRetorno: 6000, response: res});
+						}
+						callback(res);
+					});
+				})
+				.fail(function(error) {
+					var statusCode = error.statusText == 'timeout' ? 28 : 0;
+					xajax_atualizarVendaPorRetornoCallback(idVenda, {code: statusCode}, function(res) {
+						callback(res);
+					});
+				});
+		} else {
+			callback({error: '', codigoDeRetorno: 6000});
+		}
+	});
+}
+
+function enviarCurlLocal(data) {
+	return $.ajax({
+		type: 'POST',
+		async: true,
+		cache: false,
+		timeout: 1000,
+		contentType: 'application/' + data.contentType,
+		dataType: data.contentType,
+		url: data.url,
+		data: data.body,
+		beforeSend: function(xhr) {
+			for (var i = 0; i < data.headers.length; i++) {
+				xhr.setRequestHeader(data.headers[i].header, data.headers[i].value);
+			}
+		}
+	});
+}
+
+function statusSat(callback) {
+	enviarComando('SAT.ConsultarStatusOperacional', function(retorno) {
+		callback(retorno);
+	});
+}
+
+function imprimirSat(caminhoArquivo, callback) {
+	enviarComando('SAT.ImprimirExtratoVenda(' + caminhoArquivo + ')', function(retorno) {
+		callback(retorno);
+	});
+}
+
+function cancelarSat(ArqXML, callback) {
+	enviarComando('SAT.CancelarCFe(' + ArqXML + ')', function(retorno) {
+		var obj = {};
+		obj.error = retorno.error;
+		if (retorno.error == '') {
+			obj.codigoDeRetorno = retorno.data.codigoDeRetorno;
+			if (retorno.data.codigoDeRetorno == 7000) {
+				obj.sucesso = true;
+			} else {
+				obj.error = 'Erro no cancelamento';
+				obj.xml = retorno.xml;
+			}
+		}
+		callback(obj);
+	});
+}

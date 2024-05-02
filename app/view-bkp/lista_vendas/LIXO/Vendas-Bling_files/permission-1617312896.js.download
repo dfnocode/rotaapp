@@ -1,0 +1,48 @@
+function Permission(config) {
+    this.constructor(config);
+}
+
+Permission.prototype.constructor = function (config) {
+    var ref = this;
+    var deferredObj = $.Deferred();
+    this.loaded = deferredObj;
+    this.permissions = config.permissions || [];
+    this.fnSetPermissions = config.fnSetPermissions;
+    this.setAll(this.permissions).done(function() {
+        deferredObj.resolve();
+    });
+    return deferredObj.promise();
+};
+
+Permission.prototype.getAll = function() {
+    return this.permissions;
+};
+
+Permission.prototype.get = function(permission) {
+    if (typeof this.permissions[permission] !== 'undefined') {
+        return this.permissions[permission];
+    }
+    return false;
+};
+
+Permission.prototype.set = function(permission, value) {
+    if (typeof value === 'boolean') {
+        this.permissions[permission] = value;
+    }
+};
+
+Permission.prototype.setAll = function(permissions) {
+    var ref = this;
+    permissions = permissions || [];
+    var deferredObj = $.Deferred();
+    if (typeof this.fnSetPermissions === 'function') {
+        this.fnSetPermissions(function(res) {
+            ref.permissions = res;
+            deferredObj.resolve();
+        });
+    } else {
+        ref.permissions = permissions;
+        deferredObj.resolve();
+    }
+    return deferredObj.promise();
+};

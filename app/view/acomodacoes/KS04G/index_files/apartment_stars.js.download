@@ -1,0 +1,1 @@
+define(["hogan"],function(h){arguments[0]={"apartment/apartment_stars":h.compile("{{#pok_starify}}_f_rating{{/pok_starify}}\n{{#pok_stars}}\n<span class=\"text-warning\">\n{{#stars}}\n<span class=\"fa fa-star{{#half}}-half-o{{/half}}{{#empty}}-o{{/empty}}\" aria-hidden=\"true\"></span>\n{{/stars}}\n</span>\n{{/pok_stars}}")};return Object.assign.apply(null, arguments)});

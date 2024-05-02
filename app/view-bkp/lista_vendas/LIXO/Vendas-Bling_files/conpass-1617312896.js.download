@@ -1,0 +1,118 @@
+var ConpassBling = {
+	flow: null,
+	flowIndex: 0,
+	data: {},
+	current_flow: '',
+	current_step: '',
+	ready: false,
+	setCurrentFlow: function (title) {
+		if (title) {
+			this.current_flow = title;
+		}
+	},
+	setCurrentStep: function (step) {
+		this.current_step = step;
+	},
+	init: function () {
+		var df = $.Deferred();
+		if (isLocalhost() || screen && screen.width > 1920 || this.isSafari()) {
+			df.reject();
+			return df.promise();
+		} else if (window.Conpass) {
+			df.resolve();
+			return df.promise();
+		}
+		var that = this;
+		that.getData().done(function() {
+			that.data = __companyData;
+			if (!that.data || !that.data.trial) {
+				df.reject();
+			} else {
+				if (that.data.modulos) {
+					var inArray = function (value, array) {
+						return $.inArray(value, array) > -1
+					}
+					var moduloFiscal = inArray('Fiscal e tributário', that.data.modulos);
+					var moduloVendas = inArray('Vendas', that.data.modulos);
+					var moduloSuprimentos = inArray('Suprimentos', that.data.modulos);
+					var moduloFinanceiro = inArray('Financeiro', that.data.modulos);
+					var moduloIntegracoes = inArray('Integrações', that.data.modulos);
+					var moduloServicos = inArray('Serviços', that.data.modulos);
+				}
+				var userObj = {
+					name: that.data.nome,
+					email: that.data.email,
+					custom_fields: {
+						porte: that.data.porte,
+						telefone: that.data.telefone,
+						plano: that.data.plano,
+						trial: that.data.trial,
+						moduloFiscal: moduloFiscal,
+						moduloVendas: moduloVendas,
+						moduloSuprimentos: moduloSuprimentos,
+						moduloFinanceiro: moduloFinanceiro,
+						moduloIntegracoes: moduloIntegracoes,
+						moduloServicos: moduloServicos
+					}
+				};
+				var fastConpass = document.createElement('script');
+				fastConpass.src = 'https://fast.conpass.io/m4z5ekU-nRnW.js';
+				document.body.appendChild(fastConpass);
+				fastConpass.onload = function () {
+					window.Conpass.init(userObj);
+					ConpassBling.registerEvents();
+					df.resolve();
+				}
+			}
+		})
+		return df.promise();
+	},
+	registerEvents: function () {
+		if (!window.BlingTracker) {
+			return;
+		}
+		var that = this;
+		window.addEventListener('onstartflow', function (event) {
+			that.setCurrentFlow(event.detail.title);
+			BlingTracker.track('Iniciou Fluxo', {
+				flow: event.detail.title
+			});
+		}, false);
+		window.addEventListener('onfinishflow', function (event) {
+			BlingTracker.track('Completou Fluxo', {
+				flow: that.current_flow,
+				step: that.current_step
+			});
+			if (Array.isArray(that.flow)) {
+				that.flowIndex++;
+				if (that.flowIndex < that.flow.length) {
+					var aFlow = that.flow[that.flowIndex];
+					setTimeout(function () {
+						that.startFlowWithoutInit(aFlow);
+					}, 100)
+				}
+			}
+		}, false);
+		window.addEventListener('onstartstep', function (event) {
+			that.setCurrentStep(event.detail.title);
+		}, false);
+	},
+	startFlow: function (flow) {
+		var aFlow = Array.isArray(flow) ? flow[this.flowIndex] : flow;
+		if ((this.flow && this.flow != flow) || !this.flow) {
+			this.flow = flow;
+		}
+		this.init().done(function () {
+			Conpass.startFlow(aFlow);
+		});
+	},
+	startFlowWithoutInit: function (flow) {
+		if (flow) {
+			Conpass.startFlow(flow);
+		}
+	},
+	isSafari: function () {
+		return /constructor/i.test(window.HTMLElement) || (function (p) { return p.toString() === "[object SafariRemoteNotification]"; })(!window['safari'] || (typeof safari !== 'undefined' && window['safari'].pushNotification));
+	},
+	getData: getCompanyDataTrackers
+}

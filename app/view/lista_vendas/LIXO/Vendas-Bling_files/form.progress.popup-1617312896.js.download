@@ -1,0 +1,44 @@
+function ProgressPopup() {
+	var _this = this;
+	this.dialog = null;
+	this.options = {
+		content: $('#popup-progress'),
+		config: {
+			title: '',
+			width: 300
+		},
+		textOk: 'Iniciar',
+	};
+
+	this.open = function() {
+		var fnOk = this.options['fnOk'];
+		this.options['fnOk'] = function() {
+			$($('#popup-progress').parent().find('.ui-dialog-buttonset button')[0]).hide()
+			if(fnOk) {
+				fnOk();
+			}
+			return false;
+		}
+		this.dialog = createDialog(this.options);
+		$(this.dialog).find('.info').show();
+	}
+
+	this.setTotal = function(total) {
+		$(this.dialog).find('.info').hide();
+		$(this.dialog).find('.progress').attr('data-total', total);
+		$(this.dialog).find('.progressbar').css('width', '1%');
+		$(this.dialog).find("#status-envio").show();
+		$(this.dialog).find('.progress-text-reg').text('0');
+		$(this.dialog).find('.progress-text-total').text(total);
+	}
+
+	this.updateProgress = function(value) {
+		$(this.dialog).find('.progressbar').css('width', ($(this.dialog).find('.progressbar').width() * 100 / $(this.dialog).find('.progress').width()) + (value * 100 / $(this.dialog).find('.progress').attr('data-total')) + '%');
+		$(this.dialog).find('.progress-text-reg').text(parseInt($(this.dialog).find('.progress-text-reg').text()) + value);
+	}
+
+	this.close = function() {
+		$(this.dialog).find("#status-envio").hide()
+		$(this.dialog).dialog().dialog('close');
+	}
+}

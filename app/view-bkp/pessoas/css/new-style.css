@@ -1,0 +1,11 @@
+.divs {
+    display: none;
+}
+
+.hide {
+    display: none;
+}
+
+.form-group>label {
+    color: black;
+}

@@ -1,0 +1,726 @@
+function Filter(conf) {
+	this.config = {
+		searchTop: true,
+		area: $('#search-left-area'),
+		dynamicPlaceholder: 'Pesquisa',
+		moreFilters: $('#more-filters'),
+		widthOpen: 250,
+		widthClose: 35,
+		afterOpen : function(){},
+		afterClose: function(){},
+		afterInit: null,
+		datatable: null,
+		resetValues : [],
+		countSelecteds: false,
+		tagArea : $('#header-list'),
+		commonActions: null,
+		analyseFilter: {
+			analyse: false,
+			dateInterval: null,
+			defaultDateType: null,
+			resetAnalyser: [],
+			deleteFilters: [],
+			deleteResets: ['data-ini', 'dataIni', 'data-fim', 'dataFim'],
+			extraFields: [],
+			exceptions: null
+		},
+		onFilter : function () {
+			listar();
+		},
+		messages:{},
+		dynamic : null,
+		label : {
+			button: 'Filtrar',
+			title: 'FILTROS',
+			showAll: 'Exibindo todos os cadastros'
+		},
+		storageName: '__bling-filter-bar'
+	};
+	LerConfiguracoes(this.config, conf);
+	this.build();
+	this.counts = null;
+	if (this.config.commonActions) {
+		this.fnCommonActions(this.config.commonActions);
+	}
+	if (this.getCurrentState()) {
+		this.open();
+	}
+	this.displayHeader(true);
+}
+
+Filter.prototype.logFilter = function() {
+	var filterValues = JSON.parse(JSON.stringify(this.values()));
+	var filterConfig = JSON.parse(JSON.stringify(this.config.analyseFilter));
+	var title = $('title').text().replace("- Bling", "").replace(/\((.*?)\)/, '').trim();
+	$.each(filterConfig.extraFields, function() {
+		filterValues[this] = document.getElementById(this).value;
+	});
+	$.each(filterConfig.deleteFilters, function() {
+		if (filterValues[this] !== undefined) {
+			delete filterValues[this];
+		}
+	});
+	if (filterConfig.exceptions) {
+		$.each(filterConfig.exceptions, function(field, exception) {
+			if (exception.value.indexOf(filterValues[exception.field]) >= 0) {
+				delete filterValues[field];
+			}
+		});
+	}
+	if (filterValues.pagina !== undefined) {
+		delete filterValues.pagina;
+	}
+	$.ajax({
+		async: false,
+		'type': 'post',
+		'url': 'utils/requestMethods.php',
+		'data': {action: 'logFilter', 'arguments': {'filterValues': filterValues, 'filterConfig': filterConfig, 'title': title}}
+	}).done(function(filterData) {
+		var filterData = $.parseJSON(filterData);
+		if (filterData.hitMessage) {
+			gaSendMessage(filterData.hitMessage, 'filter', filterData.dimension);
+		}
+	});
+}
+
+Filter.prototype.setPlaceholder = function (placeholder) {
+	placeholder = placeholder || this.config.dynamicPlaceholder;
+	var pesquisaElement = document.getElementById('pesquisa-mini');
+	pesquisaElement.setAttribute('placeholder', placeholder);
+	pesquisaElement.className += ' search-input-action';
+};
+
+Filter.prototype.onFilter = function() {
+	if (typeof pagina != 'undefined') {
+		pagina = 1;
+	}
+	if (!this.config.datatable.config.feed.paginacao) {
+		this.config.datatable.config.feed.paginacao = {
+			atual :1
+		};
+	} else {
+		this.config.datatable.config.feed.paginacao.atual = 1;
+	}
+	this.config.datatable.config.feed.data = [];
+	this.pending = false;
+	this.config.datatable.lastChecked = null;
+	this.config.onFilter();
+	if (this.config.analyseFilter.analyse) {
+		this.logFilter();
+	}
+};
+
+Filter.prototype.build = function() {
+	if (this.config.searchTop) {
+		this.renderTop();
+	}
+	var ref = this;
+	this.closeFilter = $('<div>',{ id:'title-filter'}).append(
+		$('<span>', { class:'fas fa-filter'}),
+		$('<h1>', { text: this.config.label.title }),
+		$('<span>', { class:'fas fa-chevron-left', title: 'Minimizar filtros'}),
+		$('<br>', { class: 'clr'})
+	).on('click', function(e) {
+		e.stopPropagation();
+		ref.close();
+	});
+	this.openFilter = $('<div>', {class: 'open-filter', id: 'open-filter'}).append($('<span>', {class: 'fas fa-filter'}));
+	var attrs = { id:'content-filter'};
+	this.content = $('<div>', attrs).append(
+		this.closeFilter,
+		function() {
+			if (ref.config.area.find('form').length == 0) {
+				return $('<form>').append(
+					ref.config.area.html()
+					);
+			}
+			return ref.config.area.html();
+		}(),
+		$('<div>', { id:'filter-button-area' }).append(
+			$('<button>', { text: this.config.label.button, class: 'btn-secundary-novo'}).unbind().on('click', function(event) {
+				event.preventDefault();
+				ref.onFilter();
+				if (ref.afterFilter) {
+					ref.afterFilter();
+				}
+				ref.message();
+			})
+			)
+		);
+	this.config.area.addClass('hidden-xs hidden-sm').unbind().on('click', function(e) {
+		e.preventDefault();
+		ref.open();
+	}).html([this.openFilter,this.content]);
+	this.renderAdvancedArea();
+	this.renderPeriodFields();
+	this.update();
+	if (/Edge/.test(navigator.userAgent)) {
+		ref.config.area.find('form').css('margin-bottom','60px');
+	}
+	var filterLog = this;
+	var filterConfig = this.config.analyseFilter;
+	setTimeout(function() {
+		filterConfig.resetAnalyser = filterLog.values();
+		$.each(filterConfig.extraFields, function() {
+			filterConfig.resetAnalyser[this] = document.getElementById(this).value;
+			document.getElementById(this).addEventListener('change', function(){
+				if (filterConfig.analyse) {
+					filterLog.logFilter();
+				}
+			});
+		});
+		$.each(filterConfig.deleteResets, function() {
+			if (filterConfig.resetAnalyser[this]) {
+				delete filterConfig.resetAnalyser[this];
+			}
+		});
+	}, 100);
+};
+
+Filter.prototype.renderPeriodFields = function() {
+	var periods = this.config.area.find('[data-period]');
+	var calculaPeriodo = function(datas,periodo, periodoInserir) {
+		var  name = periodo.value;
+		if (name == 'data') {
+			name = 'dia';
+		}
+		var response = inserePeriodoData('#'+$(datas[0]).attr('name'), periodoInserir, name);
+		$(datas[0]).datepickerFiltro('setDate', response.data1);
+		$(datas[1]).datepickerFiltro('setDate', response.data2);
+	};
+	for (var i = 0; i < periods.length; i++) {
+		var divItens = $('#'+$(periods[i]).attr('data-period'));
+		var inputs = divItens.find('.input-daterange input');
+		var arrowRight = divItens.find('.fa-chevron-right.arrow-date');
+		if (arrowRight.length == 0) {
+			arrowRight= $('<span>', { class : 'fas fa-chevron-right arrow-date'});
+		}
+		var arrowLeft = divItens.find('.fa-chevron-left.arrow-date');
+		if (arrowLeft.length == 0) {
+			arrowLeft = $('<span>', { class : 'fas fa-chevron-left arrow-date'});
+		}
+		divItens.find('.input-daterange')
+				.append(arrowRight.on('click', function() {
+					var periodo = periods[i];
+					var datas = inputs;
+					return function() {
+						calculaPeriodo(datas, periodo, 1);
+					};
+				}()
+				)).prepend(arrowLeft.on('click', function() {
+					var periodo = periods[i];
+					var datas = inputs;
+					return function() {
+						calculaPeriodo(datas, periodo, -1);
+					};
+				}()));
+		$(inputs[0]).on('keyup', function() {
+			var periodo = periods[0];
+			var dataFim = inputs[1];
+			return function(e) {
+				if (e.keyCode == 13) {
+					if (periodo.value == 'data' || periodo.value == 'dia') {
+						$(dataFim).datepickerFiltro('setDate', $(this).val());
+					}
+				}
+			};
+		}());
+		$(inputs[0]).on('changeDate blur', function() {
+			var periodo = periods[0];
+			var dataFim = inputs[1];
+			return function() {
+				if (periodo.value == 'data' || periodo.value == 'dia') {
+					$(dataFim).datepickerFiltro('setDate', $(this).val());
+				}
+			};
+		}());
+		$(periods[i]).on('change', function() {
+			var div = divItens;
+			var dates = inputs;
+			return function () {
+				var currDate = getDataAtual();
+				if (typeof dataAtual != 'undefined' && dataAtual) {
+					currDate = dataAtual;
+				} else if (typeof dataServidor != 'undefined' && dataServidor) {
+					currDate = dataServidor;
+				}
+				div.addClass('has-arrows').removeClass('hidden').show();
+				$(dates[1]).css({'display': 'inline-block'});
+				$([dates[0], dates[1]]).attr('disabled', false);
+				$(dates[0]).next('span').css({'display': 'table-cell'});
+				switch (this.value) {
+					case 'data':
+					case 'dia':
+						$(dates[0]).datepickerFiltro('setDate', currDate);
+						$(dates[1]).datepickerFiltro('setDate', currDate);
+						$(dates[1]).css({'display': 'none'});
+						$(dates[1]).off('changeDate', this.dateUpdated);
+						$(dates[0]).next('span').css({'display': 'none'});
+						break;
+					case 'ult30':
+					case 'ultimos':
+						$(dates[0]).datepickerFiltro('setDate', getDateByDistance());
+						$(dates[1]).datepickerFiltro('setDate', currDate);
+						div.addClass('hidden');
+						break;
+					case '':
+					case 'todos':
+					case 'atrasadas':
+					case 'todasEmAberto':
+						div.addClass('hidden');
+						break;
+					case 'semana':
+						var t = new Date(new Date());
+						t.setDate(t.getDate() - t.getDay());
+						var ultimoDomingo = String(t.getDate()).padStart(2,'0')+'/'+String(t.getMonth()+1).padStart(2, '0')+'/'+t.getFullYear();
+						t.setDate(t.getDate() + 6);
+						var data2 = String(t.getDate()).padStart(2,'0')+'/'+String(t.getMonth()+1).padStart(2, '0')+'/'+t.getFullYear();
+						$(dates[0]).datepickerFiltro('setDate', ultimoDomingo);
+						$(dates[1]).datepickerFiltro('setDate', data2);
+						break;
+					case 'mes':
+						$(dates[0]).datepickerFiltro('setDate', getDataInicialMes(currDate));
+						$(dates[1]).datepickerFiltro('setDate', getDataFinalMes(currDate));
+						$([dates[0], dates[1]]).attr('disabled', true).css('background-color', '#FFF');
+						break;
+					default:
+						$(dates[0]).datepickerFiltro('setDate', getDataInicialMes(currDate));
+						$(dates[1]).datepickerFiltro('setDate', getDataFinalMes(currDate));
+						div.removeClass('has-arrows');
+					break;
+				}
+			};
+		}()).change();
+		var hasCustomMessage = false;
+		for (var message in this.config.messages) {
+			if (message.indexOf($(periods[i]).attr('name')) != -1 || message.indexOf($(inputs[0]).attr('name')) != -1 || message.indexOf($(inputs[1]).attr('name')) != -1) {
+				hasCustomMessage = true;
+				break;
+			}
+		}
+		if (hasCustomMessage) {
+			continue;
+		}
+		this.config.messages[$(periods[i]).attr('name') + ',' + $(inputs[0]).attr('name') + ',' + $(inputs[1]).attr('name')] = {
+			message : function() {
+				var periodo = $(periods[i]);
+				var datas = inputs;
+				var div = divItens;
+				return function(form) {
+					if ((!$(datas[0]).val() || !$(datas[1]).val()) && !div.hasClass('hidden')) {
+						periodo.change();
+					}
+					if (this.isDefaultValue(periodo)) {
+						return false;
+					}
+					var prefix = periodo.find('option:selected').text();
+					if (prefix == 'No dia' || prefix == 'Do dia' || prefix == 'No mês' || prefix == 'Do mês' || prefix == 'De um período' || prefix == 'No período') {
+						prefix = '';
+					}
+					return  this.label(periodo) + ': ' + prefix + ' ' + (div.hasClass('hidden') ? '' : this.buildMessageDateRange($(datas[0]), $(datas[1])));
+				};
+			}()
+		};
+	}
+};
+
+Filter.prototype.update = function() {
+		var ref = this;
+	//todo pega da área do filtro
+	var ranges = $('.input-daterange');
+	if (ranges.length > 0) {
+		ranges.datepickerFiltro('destroy').datepickerFiltro({
+			container: this.config.area,
+			orientation: 'auto',
+			autoclose: true
+		});
+	}
+	this.dynamic = null;
+	if (this.config.dynamic) {
+		if (typeof DynamicFilter == 'undefined') {
+			Script.include(['templates/components/filter/dynamic.js']);
+		}
+		this.config.dynamic.onChange = function (item) {
+			ref.messages.onChange('dynamic-filter', item);
+		};
+		this.dynamic = new DynamicFilter(this.config.dynamic);
+	}
+	if (this.messages) {
+		this.messages.config.area.html('');
+		this.messages = null;
+	}
+	this.messages = new FilterMessage({
+		area : this.config.tagArea,
+		resetValues : this.config.resetValues,
+		countSelecteds: this.config.countSelecteds,
+		onFilter : function() {
+			ref.onFilter();
+		},
+		datatable:this.config.datatable,
+		filter: this,
+		messages: this.config.messages,
+		inputs : this.config.area.find('form')[0],
+		dynamic : this.dynamic
+	});
+};
+
+Filter.prototype.renderTop = function () {
+	var topArea = $('.search-bar');
+	if (topArea.length == 0) {
+		return;
+	}
+	var ref = this;
+	$.ajax({
+		async: false,
+		url:'templates/components/filter/top.php',
+		contentType: 'text/html; charset=UTF-8',
+		cache: true
+	})
+	.then(function(html){
+		topArea.append(html);
+		$('#btn-mini-search').on('click', function() {
+			ref.onFilter();
+		});
+		$('.clear-input').on('click', function() {
+			clearInputPesquisaMini();
+		});
+		$('#pesquisa-mini').on('keyup', function(event) {
+			if (event.keyCode == 13) {
+				ref.onFilter();
+				return;
+			}
+			if ($(this).val().trim().length == 0) {
+				$('.clear-input').addClass('invisivel');
+				return;
+			}
+			$('.clear-input').removeClass('invisivel');
+		}).bind('paste', function(e) {
+			var value = $(this);
+			setTimeout(function() {
+				value.val($.trim(value.val()));
+			});
+		});
+		$('#link-pesquisa').on('click', function() {
+			createDialog({
+				width: 648,
+				htmlTitle: 'Filtros',
+				content: $('<div>', { id: 'content-filter-modal'}),
+				hideCancel: true,
+				hideOk: true,
+				fnCreate: function() {
+					var modal = $('.ui-dialog[aria-describedby=content-filter-modal]').attr('id','modal-filter');
+					var content = modal.find('#content-filter-modal');
+					ref.closeAdvancedArea();
+					content.html(ref.content);
+					var ranges = $('#modal-filter .input-daterange');
+					if (ranges.length > 0) {
+						ranges.datepickerFiltro('destroy').datepickerFiltro({ autoclose: true });
+					}
+					modal.find('.ui-dialog-titlebar-close').html($('<span>', { class:'fas fa-times' }));
+					ref.afterFilter = function() {
+						modal.find('.ui-dialog-titlebar-close').click();
+					};
+				},
+				fnBeforeClose: function () {
+					ref.config.area.html(ref.content);
+					ref.closeAdvancedArea();
+					var ranges = $('#modal-filter .input-daterange');
+					if (ranges.length > 0) {
+						ranges.datepickerFiltro('destroy').datepickerFiltro({
+							container: ref.config.area,
+							orientation: 'auto'
+						});
+					}
+					ref.afterFilter = null;
+				}
+			});
+		});
+		if (ref.config.dynamicPlaceholder) {
+			ref.setPlaceholder();
+		}
+	});
+};
+
+Filter.prototype.getKey = function() {
+	return document.title.toLowerCase().split(/[ ,]+/).filter(function(idx) {
+		return $.inArray(idx, ['bling', '-', '']) == -1 && !(/\d/.test(idx));
+	}).join('-');
+};
+
+Filter.prototype.setCurrentState = function(state) {
+	if (!storageAvailable('localStorage')) {
+		return;
+	}
+	var storage = window.localStorage;
+	result = storage.getItem(this.config.storageName) || [];
+	if (result.length) {
+		var key = this.getKey();
+		var result = JSON.parse(result);
+		if (result) {
+			result = result.filter(function(element) {
+				return element.interface != key;
+			});
+		}
+	}
+	result.push({
+		interface: this.getKey(),
+		state: state
+	});
+	storage.setItem(this.config.storageName, JSON.stringify(result));
+};
+
+Filter.prototype.getCurrentState = function() {
+	if (!storageAvailable('localStorage')) {
+		return;
+	}
+	var storage = window.localStorage.getItem(this.config.storageName);
+	var state = false;
+	if (storage) {
+		var key = this.getKey();
+		var result = JSON.parse(storage);
+		if (result) {
+			result = result.filter(function(element) {
+				return element.interface == key;
+			});
+			if (result[0]) {
+				state = result[0].state;
+			}
+		}
+	}
+	return state;
+};
+
+Filter.prototype.open = function() {
+	if (this.isOpen) {
+		return;
+	}
+	this.config.area.css({ 'width' : this.config.widthOpen });
+	this.config.area.addClass('open');
+	this.isOpen = true;
+	this.config.area.unbind();
+	this.config.area.parents('.filter-left').find('#lista').addClass('margin-search-bar');
+	this.config.afterOpen();
+	this.setCurrentState(this.isOpen);
+};
+
+Filter.prototype.close = function() {
+	if (!this.isOpen) {
+		return;
+	}
+	ref = this;
+	ref.config.area.unbind().bind('click', function(e) {
+		e.stopPropagation();
+		ref.open();
+	});
+	this.config.area.removeClass('open');
+	this.config.area.css({ 'width' : this.config.widthClose });
+	this.config.area.parents('.filter-left').find('#lista').removeClass('margin-search-bar');
+	this.isOpen = false;
+	this.config.afterClose();
+	this.setCurrentState(this.isOpen);
+};
+
+Filter.prototype.renderAdvancedArea = function() {
+	var ref = this;
+	this.advancedArea = $('#advanced-area');
+	this.btnAdvaned = $('<div>', { id: 'btn-advanced' }).append(
+		$('<i>', { class : 'fas fa-plus-square'}),
+		$('<a>', { text: ' Opções avançadas', class:'link link-action' })
+		).on('click', function() {
+			ref.openAdvancedArea();
+		}).insertBefore(this.advancedArea);
+};
+
+Filter.prototype.openAdvancedArea = function() {
+	var ref = this;
+	this.advancedArea.show();
+	$(this.btnAdvaned).find('.fa-plus-square').removeClass('fa-plus-square').addClass('fa-minus-square');
+	$(this.btnAdvaned).unbind('click').on('click', function() {
+		ref.closeAdvancedArea();
+	});
+};
+
+Filter.prototype.closeAdvancedArea = function() {
+	var ref = this;
+	this.advancedArea.hide();
+	$(this.btnAdvaned).find('.fa-minus-square').removeClass('fa-minus-square').addClass('fa-plus-square');
+	$(this.btnAdvaned).unbind('click').on('click', function() {
+		ref.openAdvancedArea();
+	});
+};
+
+Filter.prototype.message = function() {
+	this.messages.show();
+};
+
+Filter.prototype.clear = function(filter) {
+	if (filter === undefined) {
+		filter = true;
+	}
+	this.messages.clearAll(filter);
+};
+
+Filter.prototype.updateTotalSelecteds = function(selecteds) {
+	this.messages.updateTotalSelecteds(selecteds);
+};
+
+Filter.prototype.fnCommonActions = function(actions) {
+	var permissions = null;
+	if (typeof actionBar != 'undefined') {
+		permissions = actionBar.permissions;
+	}
+	$('.search').append($('<div>', {class:'common-action-container'}));
+	$.each(actions, function(key, value) {
+		permission = '';
+		if (value.dataSystemAction != null) {
+			permission = value.dataSystemAction;
+			if (permissions && Object.keys(permissions).length > 0 && !permissions[permission]) {
+				return;
+			}
+		}
+		$('.common-action-container').append(
+			$('<button>', {'data-system-permission': permission, title:value.title,'class':value.class || '', disabled:(value.class == 'act-excluir' ? 'disabled' : false), id:value.id || '', style: value.style}).append(
+				$('<i>', {class:value.icon}),
+				$('<span>', {text:value.text})
+				).on('click', function() {
+					if(typeof value.function != 'undefined') {
+						if(typeof value.parameters != 'undefined') {
+							window[value.function].apply(null, value.parameters);
+						} else {
+							window[value.function]();
+						}
+					}
+				})
+				);
+	});
+};
+
+Filter.prototype.values = function() {
+	var inputs = this.config.area.find('form');
+	if (inputs.length == 0) {
+		inputs = $('#content-filter-modal').find('form');
+	}
+	inputs = inputs[0];
+	var res = {
+		pesquisa : $('#pesquisa-mini').val()
+	};
+	if (inputs) {
+		for (var i = 0; i < inputs.length; i++) {
+			var input = $(inputs[i]);
+			if (input.tagName == 'BUTTON') {
+				continue;
+			}
+			var name = input.attr('data-filter') || (this.sanitize(input.attr('name') || input.attr('id')));
+			if (!name) {
+				continue;
+			}
+			res[name] = input.val();
+			if (input.attr('type') == 'checkbox') {
+				res[name] = input.is(':checked');
+			}
+			if (res[name] && typeof res[name] == 'string') {
+				res[name] = res[name].trim();
+			}
+		}
+	}
+	if (this.dynamic) {
+		res.filtroDinamico = {};
+		for (var dynamic in this.dynamic.filters) {
+			var refName = 'dynamics[][' + dynamic + ']';
+			res.filtroDinamico[dynamic] = res[refName];
+			delete res[refName];
+		for (var values in this.dynamic.filters[dynamic].values) {
+		    res.filtroDinamico[dynamic] = this.dynamic.filters[dynamic].values[values].values[0];
+		}
+		}
+	}
+	if (typeof pagina != undefined) {
+		res.pagina = pagina;
+	}
+	return res;
+};
+
+Filter.prototype.serialize = function(values) {
+	var str = '';
+	if (!values) {
+		values = this.values();
+	}
+	for (var p in values) {
+		if (Array.isArray(values[p])) {
+			continue;
+		}
+		//todo analyse is a object
+		if (typeof values[p] == 'object') {
+			str += '&' + encodeURIComponent(p) + "=" + JSON.stringify(values[p]);
+			continue;
+		}
+		str += '&' + encodeURIComponent(p) + "=" + encodeURIComponent(values[p]);
+	}
+	return str.substr(1);
+};
+
+Filter.prototype.sanitize = function(name) {
+	if (!name) {
+		return;
+	}
+	return camelize(name.replace('filtro-',''));
+};
+
+Filter.prototype.displayHeader = function(hide) {
+	var headerListElement = document.getElementById('header-list');
+	if (headerListElement) {
+		headerListElement.hidden = hide;
+	}
+};
+
+Filter.prototype.disable = function () {
+	if (this.isDisabled) {
+		return;
+	}
+	this.isDisabled = true;
+	this.disableds = [];
+	//todo tree
+	$('.search .search-actions, #search-input, #search-tag').hide()
+	this.config.area.css({ 'opacity' : '0.6' });
+	var that = this;
+	this.getFormInputs(function(input) {
+		if (input.is(':disabled')) {
+			that.disableds.push(input);
+		}
+		input.prop('disabled', true);
+	});
+};
+
+Filter.prototype.enable = function () {
+	if (!this.isDisabled ) {
+		return;
+	}
+	this.isDisabled = false;
+	var that = this;
+	$('.search .search-actions, #search-input, #search-tag').show();
+	this.getFormInputs(function(input) {
+		for (var i = 0, tot = that.disableds.length; i < tot; i ++) {
+			if (that.disableds[i][0] == input[0]) {
+				return;
+			}
+		}
+		input.prop('disabled', false);
+	});
+	this.disableds = [];
+	this.config.area.css({ 'opacity' : '1' });
+};
+
+Filter.prototype.getFormInputs = function(callback) {
+	var inputs = this.config.area.find('form');
+	if (inputs.length == 0) {
+		inputs = $('#content-filter-modal').find('form');
+	}
+	if (inputs) {
+		inputs = inputs[0];
+		for (var i = 0; i < inputs.length; i++) {
+			var input = $(inputs[i]);
+			callback(input);
+		}
+		callback($('#filter-button-area button'));
+	}
+}

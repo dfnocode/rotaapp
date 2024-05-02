@@ -1,0 +1,1640 @@
+var t;
+var tEstrutura;
+var precoAbaixo = '0';
+var estoqueAtual = '0';
+var estoqueAtualEspecifico = '0';
+var estoqueMinimo = '0';
+var estoqueMaximo = '0';
+var tipoProduto = 'P';
+var itemClicado = false;
+var estruturaDosProdutos = {};
+var itemTemp = {};
+var itemEdicaoTemp = {};
+var idItemEdicaoTemp = '0';
+var acrescimoDesconto = 0;
+var permiteAdicaoItemCallback = ['valorLista', 'valorUnitario', 'estoque', 'dadosProduto', 'estrutura'];
+var idConfUniNeg = '0';
+var errorOccuredOnSave = false;
+
+function setarAcrescimoDesconto(aliquota) {
+	acrescimoDesconto = aliquota;
+}
+
+function buscarValor(idProduto, fieldName, acrescimoDesconto, idLoja, idListaPreco) {
+	var deferredObj = $.Deferred();
+	xajax_buscarValor(idProduto, acrescimoDesconto, idLoja, idListaPreco, function(res) {
+		$('#' + fieldName).val(res.valor);
+		deferredObj.resolve();
+	});
+	return deferredObj.promise();
+}
+
+function buscarDadosEstoqueProduto(idProduto, idVenda, idConfUnidadeNegocio) {
+	var deferredObj = $.Deferred();
+	xajax_buscarDadosEstoqueProdutoArray(idProduto, idVenda, idConfUnidadeNegocio, function(res) {
+		setarDadosEstoqueProduto(res.estoqueAtual, res.estoqueMinimo, res.estoqueMaximo, res.tipo, res.estoqueEspecifico);
+		deferredObj.resolve();
+	});
+	return deferredObj.promise();
+}
+
+function obterEstruturaDoProduto(idProduto, posicaoVetor) {
+	var deferredObj = $.Deferred();
+	xajax_obterEstruturaDoProduto(idProduto, posicaoVetor, function(res) {
+		setArrayEstruturaDoProduto(res.array, res.posicaoVetor);
+		deferredObj.resolve();
+	});
+	return deferredObj.promise();
+}
+
+function buscarDadosProduto(idProduto, fieldCodigo, fieldUnidade, fieldPesoBruto, fieldEditarItem, fieldIdLinhaProduto, fieldDescricaoDetalhada) {
+	var deferredObj = $.Deferred();
+	xajax_buscarDadosProduto(idProduto, function(dadosProduto) {
+		$('#' + fieldCodigo).val(dadosProduto.codigo);
+		$('#' + fieldUnidade).val(dadosProduto.unidade);
+		$('#' + fieldPesoBruto).val(dadosProduto.pesoBruto);
+		diferencaPrecos('precounitario', 'precoLista', 'descontoItem', 'valor');
+		if (fieldEditarItem && fieldEditarItem.length) {
+			$('#' + fieldEditarItem).hide();
+		}
+		$('#' + fieldIdLinhaProduto).val(dadosProduto.idLinhaProduto);
+		$('#' + fieldDescricaoDetalhada).val(dadosProduto.descricaoDetalhada);
+		deferredObj.resolve();
+	});
+	return deferredObj.promise();
+}
+
+function setIdProduto(id, idField) {
+	displayWait('pleasewait', true, 'Obtendo dados do produto, aguarde...');
+	idField = idField.replace('produto', '');
+	estoqueAtual = '0';
+	estoqueMinimo = '0';
+	estoqueMaximo = '0';
+	$('#produto' + idField + 'Id').val(id);
+	$('#produto' + idField).removeClass('ac_error')
+						   .addClass('tipsyOff')
+						   .removeAttr('title');
+	if ($('#quantidade' + idField).val() == '0' || $('#quantidade' + idField).val() == '0,00' || $('#quantidade' + idField).val() == '') {
+		$('#quantidade' + idField).val('1');
+	}
+	var valorPrecoLista = buscarValor(id, 'precoLista' + idField, acrescimoDesconto, $('#loja option:selected').val(), $('#idListaPreco').val());
+	var valorPrecoUnitario = buscarValor(id, 'precounitario' + idField, acrescimoDesconto, $('#loja option:selected').val(), $('#idListaPreco').val());
+	var dadosEstoque = buscarDadosEstoqueProduto(id, $('#id').val(), $('#idConfUnidadeNegocio').val());
+	var dadosEstruturaProduto = obterEstruturaDoProduto(id , idField);
+	var dadosProduto = buscarDadosProduto(id, 'codigo' + idField, 'un' + idField, 'peso' + idField, '', 'idLinhaProduto' + idField, 'descricaoDetalhada' + idField);
+
+	dadosProduto.done(function() {
+		verificaAddAlinhaAutomaticamente(id);
+		totalItem('quantidade' + idField, 'precounitario' + idField, 'precototal' + idField, 'S', 'alq_comissao' + idField, 'base_comissao' + idField, 'vlr_comissao' + idField, 'descontoItem' + idField, 'idLinhaProduto' + idField);
+		verificarCallbackItens('dadosProduto');
+	});
+
+	$('#descontoItem' + idField).val('0,00');
+	$('#quantidade' + idField).focus().select();
+	$('#alqIPI' + idField).val('0,00');
+	testDuplicated();
+	$.when(valorPrecoLista, valorPrecoUnitario, dadosEstoque, dadosEstruturaProduto, dadosProduto).done(function() {
+		closeWait('pleasewait');
+	});
+}
+
+function setIdProdutojQuery(param) {
+	displayWait('pleasewait', true, 'Obtendo dados do produto, aguarde...');
+	if (typeof param != 'object' && param != undefined) {
+		param = {'id': param};
+	}
+	if (param.idField == null) {
+		param.idField = '';
+	}
+	estoqueAtual = '0';
+	estoqueMinimo = '0';
+	estoqueMaximo = '0';
+	if ($('#quantidade' + param.idField).val() == '0' || $('#quantidade' + param.idField).val() == '0,00' || $('#quantidade' + param.idField).val() == '') {
+		$('#quantidade' + param.idField).val('1');
+	}
+	$('#idLinhaProduto' + param.idField).val(param.idLinhaProduto);
+	$('#produto' + param.idField + 'Id').val(param.id);
+	$('#produto' + param.idField).removeClass('ac_error')
+								 .addClass('tipsyOff')
+								 .removeAttr('title');
+	$('#tipoEstoque' + param.idField).val(param.tipoEstoque);
+	aguardarCallbackItens();
+	permiteAdicaoItemCallback = [];
+	var valorPrecoLista = buscarValor(param.id, 'precoLista' + param.idField, acrescimoDesconto, $('#loja option:selected').val(), $('#idListaPreco').val());
+	valorPrecoLista.done(function() {
+		verificarCallbackItens('valorLista');
+	});
+	var valorPrecoUnitario = buscarValor(param.id, 'precounitario' + param.idField, acrescimoDesconto, $('#loja option:selected').val(), $('#idListaPreco').val());
+	valorPrecoUnitario.done(function() {
+		totalItem('quantidade' + param.idField, 'precounitario' + param.idField, 'precototal' + param.idField , 'S', 'alq_comissao' + param.idField , 'base_comissao' + param.idField , 'vlr_comissao' + param.idField , 'descontoItem' + param.idField, 'idLinhaProduto' + param.idField);
+		verificarCallbackItens('valorUnitario');
+	});
+	var dadosEstoque = buscarDadosEstoqueProduto(param.id, $('#id').val(), $('#idConfUnidadeNegocio').val());
+	dadosEstoque.done(function() {
+		verificaAddAlinhaAutomaticamente(param.idField);
+		verificarCallbackItens('estoque');
+	});
+	var field = (param.formatoProduto !== 'E' ?	'editarItem' + param.idField : '');
+	var dadosProduto = buscarDadosProduto(param.id, 'codigo' + param.idField, 'un' + param.idField, 'peso' + param.idField, field, 'idLinhaProduto' + param.idField, 'descricaoDetalhada' + param.idField);
+	dadosProduto.done(function() {
+		totalItem('quantidade' + param.idField, 'precounitario' + param.idField, 'precototal' + param.idField, 'S', 'alq_comissao' + param.idField, 'base_comissao' + param.idField, 'vlr_comissao' + param.idField, 'descontoItem' + param.idField, 'idLinhaProduto' + param.idField);
+		verificarCallbackItens('dadosProduto');
+	});
+	var dadosEstruturaDoProduto = obterEstruturaDoProduto(param.id, param.idField);
+	dadosEstruturaDoProduto.done(function() {
+		verificarCallbackItens('estrutura');
+	});
+	$('#formatoProduto' + param.idField).val(param.formatoProduto);
+	$('#quantidade' + param.idField).focus().select();
+	$('#descontoItem' + param.idField).val('0,00');
+	if ($('#valorIPI').val() != 'N') {
+		if (($('#alqIPI' + param.idField).val() == '0') || ($('#alqIPI' + param.idField).val() == '')) {
+			$('#alqIPI' + param.idField).val('0,00');
+		}
+	}
+	if (param.formatoProduto === 'E') {
+		adicionarIconeEdicaoEstrutura(param.idField);
+	}
+	testDuplicated();
+	$.when(valorPrecoLista, valorPrecoUnitario, dadosEstoque, dadosProduto, dadosEstruturaDoProduto).done(function() {
+		closeWait('pleasewait');
+	});
+}
+
+function adicionarIconeEdicaoEstrutura(nroLinhaItem) {
+	if ($('#editarItem' + nroLinhaItem).length >= 1) {
+		$('#editarItem' + nroLinhaItem).remove();
+	}
+	$('#tdOperacoes' + nroLinhaItem).append(
+		$('<a>', {'id': 'editarItem' + nroLinhaItem, 'title': 'Editar componentes do produto'}).append(
+			$('<i>', {'class': 'fas fa-pencil-alt'})
+		)
+	);
+	$('#editarItem' + nroLinhaItem).bind('click', function(){
+		incluirEEditarItem(nroLinhaItem);
+	});
+}
+
+function verificaAddAlinhaAutomaticamente(id) {
+	if (id != undefined){
+		$('#h_estoque_atual_' + id).val(estoqueAtual);
+		$('#h_estoque_maximo_' + id).val(estoqueMaximo);
+		$('#h_estoque_minimo_' + id).val(estoqueMinimo);
+		$('#h_tipo_produto_' + id).val(tipoProduto);
+	}
+}
+
+function removeDetailItem(ni) {
+	var nroItens = 0;
+	$('#gritens > tbody > tr').each(function() {
+		if ($(this).css('display') != 'none') {
+			nroItens++;
+		}
+	});
+	if (ni != -1) {
+		$('#detailItem' + ni).remove();
+		delete estruturaDosProdutos[ni];
+		atualizarNumeroItens('diminui');
+
+		if (nroItens < 3) {
+			adicionarLinhaItem();
+		}
+	} else {
+		if($('#gritens > tbody > tr:last').attr('id') == 'itens' && $('#gritens > tbody > tr').size() > 2){
+			$('#itens').hide();
+		}
+	}
+	totalVenda();
+	totalGeral();
+	testDuplicated();
+}
+
+function addDetails(itens, copy) {
+	if (itens != null) {
+		$.each(itens, function(nro, item) {
+			var readonly = true;
+			if (item.codigo == null || item.codigo == '' || item.codigo == undefined) {
+				readonly = false;
+			}
+			item.estoque = getEstoqueInfo({
+				quantidade: item.quantidade,
+				estoqueAtual: item.estoqueAtual,
+				estoqueMinimo: item.estoqueMinimo,
+				estoqueMaximo: item.estoqueMaximo,
+				itemNro: nro,
+				tipoProduto: item.tipoProduto
+			});
+			item.estoqueEspecifico = getEstoqueInfo({
+				quantidade: item.quantidade,
+				estoqueAtual: item.estoqueAtualEspecifico,
+				estoqueMinimo: item.estoqueMinimo,
+				estoqueMaximo: item.estoqueMaximo,
+				itemNro: nro,
+				tipoProduto: item.tipoProduto,
+				especifico: 'S',
+				especificoDisabled: idConfUniNeg == '0' ? 'S' : ''
+			});
+			item.descontoItemRateado = 0;
+			addDetail(nro, item, 'N', readonly, calcularIPIST = false);
+		});
+		validarLimiteDescontoVendedor();
+	}
+	if (itens != null) {
+		$('#itens').hide();
+		$('#trh').hide();
+	} else {
+		$('#itens').show();
+		$('#trh').show();
+	}
+	testDuplicated();
+}
+
+function addDetailItem(abrirPopup) {
+	if (itemClicado) {
+		return;
+	}
+	if ($('#painel-fatura').length > 0){
+		tipoProduto = 'S';
+	}
+	if ($('#produto').val() != '' && $('#quantidade').val() != '' && $('#quantidade').val() != '0' && $('#precounitario').val() != '') {
+		if ($('#permite_venda_de_produtos_nao_cadastrados').val() == 'N' && $('#produtoId').val() == 0) {
+			$('#produto').addClass('ac_error');
+			$('#produto').removeClass('tipsyOff');
+			alert('Não é permitido vender produtos não cadastrados.');
+		} else {
+			if (abrirPopup != 'S') {
+				abrirPopup = 'N';
+			}
+			$('#produto').removeClass('ac_error');
+			$('#produto').addClass('tipsyOff');
+			$('#produto').removeAttr('title');
+			$('#itens').hide();
+			var itemNumber;
+			itemNumber = $('#itemNumber').val();
+			itemNumber++;
+			$('#itemNumber').val(itemNumber);
+			var item = {
+				idProduto: $('#produtoId').val(),
+				descricao: $('#produto').val(),
+				quantidade: $('#quantidade').val(),
+				valor: $('#precounitario').val(),
+				total: $('#precototal').val(),
+				alq_comissao: $('#alq_comissao').val(),
+				base_comissao: $('#precototal').val(),
+				vlr_comissao: $('#vlr_comissao').val(),
+				precoLista: $('#precoLista').val(),
+				estoque: getEstoqueInfo({
+					quantidade: $('#quantidade').val(),
+					estoqueAtual: estoqueAtual,
+					estoqueMinimo: estoqueMinimo,
+					estoqueMaximo: estoqueMaximo,
+					itemNro: $('#itemNumber').val(),
+					tipoProduto: tipoProduto
+				}),
+				estoqueEspecifico: getEstoqueInfo({
+					quantidade: $('#quantidade').val(),
+					estoqueAtual: estoqueAtualEspecifico,
+					estoqueMinimo: estoqueMinimo,
+					estoqueMaximo: estoqueMaximo,
+					itemNro: $('#itemNumber').val(),
+					tipoProduto: tipoProduto,
+					especifico: 'S',
+					especificoDisabled: idConfUniNeg == '0' ? 'S' : ''
+				}),
+				descontoItem: $('#descontoItem').val(),
+				descontoItemRateado: 0,
+				componentes: itemTemp,
+				idLinhaProduto: $('#idLinhaProduto').val(),
+				alqIPI: $('#alqIPI').val(),
+				un: $('#un').val(),
+				codigo: $('#codigo').val(),
+				peso: $('#peso').val(),
+				formatoProduto: $('#formatoProduto').val(),
+				tipoEstoque: $('#tipoEstoque').val(),
+				descricaoDetalhada: $('#descricaoDetalhada').val()
+			};
+			addDetail($('#itemNumber').val(), item, abrirPopup, false);
+			validarLimiteDescontoVendedor();
+			itemTemp = '';
+			$('#produto, #codigo, #descontoItem, #precounitario, #un, #tipoEstoque').val('');
+			$('#quantidade').val('1');
+			$('#precoLista, #precototal').val('0');
+			testDuplicated();
+			totalVenda();
+			totalGeral();
+		}
+	}
+}
+
+function testDuplicated() {
+	testDuplicatedItens(function(field) {
+		return '#' + field.parent().parent().find('input').attr('id');
+	});
+
+	alinharIconesPorTipo();
+}
+
+function setarDadosEstoqueProduto(aEstoqueAtual, aEstoqueMinimo, aEstoqueMaximo, aTipoProduto, aEstoqueAtualEspecifico) {
+	estoqueAtual = aEstoqueAtual;
+	estoqueMinimo = aEstoqueMinimo;
+	estoqueMaximo = aEstoqueMaximo;
+	tipoProduto = aTipoProduto;
+	estoqueAtualEspecifico = aEstoqueAtualEspecifico;
+}
+
+function setarIdConfUniNeg(id) {
+	idConfUniNeg = id;
+}
+
+function obterIdProdutosItens() {
+	var ids = [];
+	$('input[name="itens[produtoId][]"]').each(function () {
+		var chave = parseInt($(this).attr('id').replace(/[^0-9]/g,''));
+		ids[chave] = ($(this).val());
+	});
+	return ids;
+}
+
+function atualizarInfoEstoqueEspecifico() {
+	var ids = obterIdProdutosItens();
+	xajax_buscarInfoEstoqueProdutos(ids, $('#id').val(), idConfUniNeg, function(dados) {
+		$.each(dados, function(i,elem) {
+			$('#h_estoque_atual_' + i).val(elem.estoqueAtual);
+			$('#h_estoque_atual_esp_' + i).val(elem.estoqueAtualEspecifico);
+			atualizarEstoqueItem(i);
+			closeWait('vendasWait');
+		});
+	});
+}
+
+function addDetail(nro, item, abrirPopup, readonly, calcularIPIST) {
+	if (item.tipoProduto == undefined || item.tipoProduto == null) {
+		tipoProd = tipoProduto;
+	} else {
+		tipoProd = item.tipoProduto;
+	}
+
+	if (item.idProduto > 0 && item.componentes != null) {
+		estruturaDosProdutos[nro] = item.componentes;
+	} else {
+		estruturaDosProdutos[nro] = '';
+	}
+
+	if (item.idProdutoLoja === undefined || item.idProdutoLoja === '0') {
+		item.idProdutoLoja = 0;
+	}
+
+	if (item.descontoItem == '' || item.descontoItem == undefined) {
+		item.descontoItem = 0;
+	}
+
+	if (abrirPopup != 'S') {
+		abrirPopup = 'N';
+	}
+
+	if ($('#valorIPI').val() != 'N') {
+		if (item.alqIPI == '' || item.alqIPI == undefined) {
+			item.alqIPI = 0;
+		}
+	}
+
+	if ($('.active').html() === 'Comissões') {
+		var displayComissoes = '';
+		var displayOthers = 'none';
+	} else {
+		var displayComissoes = 'none';
+		var displayOthers = '';
+	}
+
+	$('<tr>', {'id': 'detailItem' + nro}).append(
+		$('<td>', {'id': 'tdProduto' + nro, 'style': 'border-right-style: none;'}).append(
+			$('<input>', {'id': 'produto' + nro, 'type': 'text', 'name': 'itens[produto][]', 'class': 'editgrid tipsyOff input_text', 'maxlength': 100, 'value': item.descricao, 'placeholder': 'Digite parte do nome ou código do produto'})
+		),
+		$('<input>', {'id': 'descricaoDetalhada' + nro, 'name': 'itens[descricaoDetalhada][]', 'type': 'hidden', 'value': item.descricaoDetalhada}),
+		$('<input>', {'name': 'itens[obs][]', 'type': 'hidden', 'value': item.obs}),
+		$('<td>', {'id': 'opcItem' + nro, 'class': 'opcItem', 'align': 'center', 'style': 'border-left-style:none;border-right-style:none;'}).append(
+			$('<a>', {'id': 'descricao_detalhada_produto' + nro, 'class': 'tableIcon'}).append(
+				$('<i>', {'class': item.descricaoDetalhada != '' ? 'icon-file-text' : 'icon-file'})
+			)
+		),
+		$('<td>', {'id': 'tdCodigo' + nro, 'class': 'item hidden-mobile'}).css('display', displayOthers).append(
+			$('<input>', {'id': 'codigo' + nro, 'name': 'itens[codigo][]', 'class': 'editgrid input_text', 'type': 'text', 'value': item.codigo, 'readonly': readonly})
+		),
+		$('<td>', {'id': 'tdUnItem' + nro, 'class': 'item hidden-mobile'}).css('display', displayOthers).append(
+			$('<input>', {'id': 'un' + nro, 'name': 'itens[un][]', 'class': 'editgrid input_text', 'type': 'text', 'maxlength': 6, 'value': item.un != '' ? item.un : ''})
+		),
+		$('<td>', {'id': 'tdQtdItem' + nro, 'class': 'item'}).css('display', displayOthers).append(
+			$('<input>', {'id': 'quantidade' + nro, 'name': 'itens[quantidade][]', 'class': 'editgrid edt-qtde input_text', 'type': 'text', 'value': item.quantidade})
+		),
+		$('<td>', {'id': 'tdPrecoLista' + nro, 'class': 'item hidden-mobile'}).css('display', displayOthers).append(
+			$('<input>', {'id': 'precoLista' + nro, 'name': 'itens[precoLista][]', 'class': 'editgrid input_text', 'type': 'text', 'readonly': true, 'value': item.precoLista})
+		),
+		$('<td>', {'id': 'tdDescontoItem' + nro, 'class': 'item'}).css('display', displayOthers).append(
+			$('<input>', {'id': 'descontoItem' + nro, 'name': 'itens[descontoItem][]', 'class': 'editgrid edt-valor input_text', 'type': 'text', 'value': item.descontoItem})
+		),
+		$('<td>', {'id': 'tdPrecoUnit' + nro, 'class': 'item'}).css('display', displayOthers).append(
+			$('<input>', {'id': 'precounitario' + nro, 'name': 'itens[precounitario][]', 'class': 'editgrid edt-valor input_text', 'type': 'text', 'value': item.valor})
+		),
+		($('#valorIPI').val() != 'N' ?
+			$('<td>', {'id': 'tdValIpi' + nro, 'class': 'item hidden-mobile'}).append(
+				$('<input>', {'id': 'alqIPI' + nro, 'name': 'itens[alqIPI][]', 'class': 'editgrid edt-valor input_text', 'type': 'text', 'value': item.alqIPI})
+			)
+		: ''),
+		$('<td>', {'id': 'tdPrecoTotal' + nro, 'class': 'item hidden-mobile'}).css('display', displayOthers).append(
+			$('<input>', {'id': 'precototal' + nro, 'name': 'itens[precototal][]', 'class': 'editgrid input_text', 'type': 'text', 'readonly': true, 'value': item.total})
+		),
+		$('<td>', {'id': 'baseComissao' + nro, 'class': 'comissao'}).css('display', displayComissoes).append(
+			$('<input>', {'id': 'base_comissao' + nro, 'name': 'itens[base_comissao][]', 'class': 'editgrid edt-number input_text', 'type': 'text', 'readonly': true, 'value': item.base_comissao})
+		),
+		$('<td>', {'id': 'descComissao' + nro, 'class': 'comissao'}).css('display', displayComissoes).append(
+			$('<input>', {'id': 'adicionais_base' + nro, 'name': 'itens[adicionais_base][]', 'class': 'editgrid input_text edt-valor', 'type': 'text', 'readonly': true, 'disabled': true, 'value': item.descontoItemRateado})
+		),
+		$('<td>', {'id': 'alqComissao' + nro, 'class': 'comissao'}).css('display', displayComissoes).append(
+			$('<input>', {'id': 'alq_comissao' + nro, 'name': 'itens[alq_comissao][]', 'class': 'editgrid input_text edt-valor', 'type': 'text', 'value': item.alq_comissao})
+		),
+		$('<td>', {'id': 'vlrComissao' + nro, 'class': 'comissao'}).css('display', displayComissoes).append(
+			$('<input>', {'id': 'vlr_comissao' + nro, 'name': 'itens[vlr_comissao][]', 'class': 'editgrid input_text', 'type': 'text', 'readonly': true, 'value': item.valorComissao})
+		),
+		$('<td>', {'id': 'tdLinhaProduto' + nro, 'style': 'display:none;'}).append(
+			$('<input>', {'id': 'idLinhaProduto' + nro, 'name': 'itens[idLinhaProduto][]', 'class': 'editgrid', 'type': 'text', 'readonly': true, 'value': item.idLinhaProduto, 'style': 'width:84px;'}),
+			$('<input>', {'id': 'idProdutoLoja' + nro, 'name': 'itens[idProdutoLoja][]', 'type': 'hidden', 'value': item.idProdutoLoja})
+		),
+		$('<td>', {'id': 'tdPeso' + nro}).css('display', 'none').append(
+			$('<input>', {'id': 'peso' + nro, 'name': 'itens[peso][]', 'class': 'editgrid', 'type': 'text', 'readonly': true, 'value': item.peso, 'style': 'width:84px;'})
+		),
+		$('<td>', {'id': 'tdOperacoes' + nro, 'style': 'border-left-style:none;text-align:center;white-space:nowrap;'}).append(
+			$('<a>', {'id': 'informacoes_adicionais_produto' + nro, 'title': 'Visualizar histórico do item para o cliente', 'style': 'float:initial;'}).append(
+				$('<i>', {'class': 'fas fa-info-circle'})
+			)
+		),
+		$('<td>', {'id': 'estoque_' + nro, 'align': 'center', 'style': 'min-width:65px;'}).append(
+			item.estoque,
+			item.estoqueEspecifico
+		).css('display', possuirEstLancado === false ? '' : 'none'),
+		$('<td>', {'id': 'colExcl' + nro, 'type': 'hidden', 'align': 'center'}).append(
+			$('<a>', {'id': 'excl' + nro, 'title': 'Remover item do pedido'}).append(
+				$('<i>', {'class': 'fas fa-trash-alt'})
+			),
+			$('<input>', {'id': 'tipoEstoque' + nro, 'type': 'hidden', 'value': item.tipoEstoque}),
+			$('<input>', {'id': 'formatoProduto' + nro, 'type': 'hidden', 'value': item.formatoProduto}),
+			$('<input>', {'id': 'produto' + nro + 'Id', 'name': 'itens[produtoId][]', 'type': 'hidden', 'value': item.idProduto}),
+			$('<input>', {'id': 'ni' + nro, 'name': 'ni', 'class': 'niComissao', 'type': 'hidden', 'value': nro})
+		)
+	).insertBefore('#itens');
+
+	if (tipoProd === 'P' && item.formatoProduto === 'E') {
+		adicionarIconeEdicaoEstrutura(nro);
+	}
+	if ($('#codigo' + nro).val() === null || $('#codigo' + nro).val() === '' || $('#codigo' + nro).val() === undefined) {
+		habilitaCodigo(nro);
+	} else {
+		desabilitaCodigo(nro);
+	}
+	$('#excl' + nro).bind('click', function (e) {
+		var tr = $(this).closest('tr');
+		var linha = $('#gritens tr').index(tr);
+		removeDetailItem(nro);
+	});
+	$('#produto' + nro).bind('blur', function() { limparEstruturaDoProduto(nro);atualizarEstoqueItem(nro); });
+	$('#descricao_detalhada_produto' + nro).bind('click', function() {
+		visualizarDescricaoDetalhada(nro);
+	});
+	popoverDescricaoDetalhada(nro, item.descricaoDetalhada);
+	var valorDoIPI = '';
+	if ($('#valorIPI').val() != 'N') {
+		valorDoIPI = 'alqIPI' + nro;
+	}
+	initFormatterField($('#dec_qtde').val(), $('#quantidade' + nro));
+	initFormatterField($('#dec_valor').val(), $('#precounitario' + nro));
+	initFormatterField('2', $('#base_comissao' + nro));
+	initFormatterField('2', $('#alq_comissao' + nro));
+	initFormatterField('2', $('#descontoItem' + nro));
+	initFormatterField(2, $('#alqIPI' + nro));
+	$('#quantidade' + nro).bind('blur', function() {totalItem('quantidade' + nro, 'precounitario' + nro, 'precototal' + nro, 'S', 'alq_comissao' + nro, 'base_comissao' + nro, 'vlr_comissao' + nro, 'descontoItem' + nro, 'idLinhaProduto' + nro, valorDoIPI); atualizarEstoqueItem(nro);});
+	$('#precounitario' + nro).bind('blur', function() {
+		diferencaPrecos('precounitario' + nro, 'precoLista' + nro, 'descontoItem' + nro, 'valor');
+		totalItem('quantidade' + nro, 'precounitario' + nro, 'precototal' + nro, 'S', 'alq_comissao' + nro, 'base_comissao' + nro, 'vlr_comissao' + nro, 'descontoItem' + nro, 'idLinhaProduto' + nro, valorDoIPI);
+		comissaoCalcularComissao(nro, true);
+	});
+	if ($('#valorIPI').val() != 'N') {
+		$('#alqIPI' + nro).bind('blur', function(){
+			totalItem('quantidade' + nro, 'precounitario' + nro, 'precototal' + nro, 'alq_comissao' + nro, 'S', 'base_comissao' + nro, 'vlr_comissao' + nro, 'descontoItem' + nro, 'idLinhaProduto' + nro, valorDoIPI);
+		});
+	}
+	$('#descontoItem' + nro).bind('blur', function() {
+		diferencaPrecos('precounitario' + nro, 'precoLista' + nro, 'descontoItem' + nro, 'percentual');
+		totalItem('quantidade' + nro, 'precounitario' + nro, 'precototal' + nro, 'S', 'alq_comissao' + nro, 'base_comissao' + nro, 'vlr_comissao' + nro, 'descontoItem' + nro, 'idLinhaProduto' + nro , valorDoIPI);
+		comissaoCalcularComissao(nro, true);validarLimiteDescontoVendedor();
+	});
+	$('#base_comissao' + nro).bind('blur', function() { comissaoCalcularComissao(nro, false); });
+	$('#alq_comissao' + nro).bind('blur', function() { comissaoCalcularComissao(nro, false); });
+	$('#informacoes_adicionais_produto' + nro).bind('click', function() { visualizarAsInformacoesProdutoCliente($('#produto' + nro + 'Id').val()); });
+	$('#informacoes_adicionais_produto' + nro).bind('onclick', function() { terribleHack(this); });
+	$('#produto' + nro).bind('onblur', function() {terribleHack(this);});
+	$('#codigo' + nro).bind('onblur', function() {terribleHack(this);});
+	$('#quantidade' + nro).bind('onblur', function() {terribleHack(this);});
+	$('#precounitario' + nro).bind('onblur', function() {terribleHack(this);});
+	$('#precototal' + nro).bind('onblur', function() {terribleHack(this);});
+	if ($('#valorIPI').val() != 'N') {
+		$('#alqIPI' + nro).bind('onblur',function(){terribleHack(this);});
+	}
+	$('#descontoItem' + nro).bind('onblur', function() {terribleHack(this);});
+	$('#idLinhaProduto' + nro).bind('onblur', function() {terribleHack(this);});
+	$('#produto' + nro).bind('keypress', function(e) {
+		completerProduct(e, 'produto' + nro, 'setIdProduto', 'S');
+		limparCodigoProduto(e, nro);
+	});
+
+	var pressedAlt = false;
+	$(document).keyup(function (e) {
+		if (e.which == 18) {
+			pressedAlt = false;
+		}
+	});
+	$('#produto' + nro).bind('keydown', function(e) {
+		if (e.which == 18) {
+			pressedAlt = true;
+		}
+
+		if (!pressedAlt || e.keyCode != 90) {
+			clearHidenResult(e, $('#produto' + nro + 'Id'));
+		}
+	});
+	$('#alq_comissao' + nro).change();
+	$('#detailItem' + nro).show();
+	$('#precounitario').removeClass('preco-abaixo');
+	$('#produto' + nro).tipsy({'gravity': $.fn.tipsy.autoWE});
+	iniciarjQuery(nro);
+	atualizarNumeroItens('soma');
+	if (abrirPopup == 'S') {
+		editarEstrutura(nro);
+	}
+	if ($('#codigo'+nro).val() == null || $('#codigo'+nro).val() == '' || $('#codigo'+nro).val() == undefined) {
+		habilitaCodigo(nro);
+	} else {
+		desabilitaCodigo(nro);
+	}
+	if (item.idProduto == 0) {
+		$('#produto'+nro).addClass('ac_warning');
+	}
+	exibirVendasFinanceiro();
+	totalItem('quantidade' + nro, 'precounitario' + nro, 'precototal' + nro, 'S', 'alq_comissao' + nro, 'base_comissao' + nro, 'vlr_comissao' + nro, 'descontoItem' + nro, 'idLinhaProduto' + nro, valorDoIPI, calcularIPIST);
+
+	popoverDescricaoProduto({
+		'nro': nro,
+		'selector': '#produto',
+		'descricao': item.descricao,
+		'dataContainer': '#gritens'
+	});
+}
+
+function desabilitaCodigo(idLinha) {
+	$('#produto'+idLinha).blur();
+	$('#produto'+idLinha).on('focusout', function(e) {
+		$('#codigo'+idLinha).prop('readOnly', true);
+		$('#codigo'+idLinha).css('background-color', '#EDF1F4');
+	});
+}
+
+function habilitaCodigo(idLinha) {
+	$('#produto'+idLinha).on('focusout', function(e) {
+		$('#codigo'+idLinha).prop('readOnly', false);
+		$('#codigo'+idLinha).css('background-color', '#red');
+	});
+}
+
+function atualizarEstoqueItem(nro) {
+	if (!possuirEstLancado){
+		var estoque = getEstoqueInfo({
+			quantidade: $('#quantidade' + nro).val(),
+			estoqueAtual: $('#h_estoque_atual_' + nro).val(),
+			estoqueMinimo: $('#h_estoque_minimo_' + nro).val(),
+			estoqueMaximo: $('#h_estoque_maximo_' + nro).val(),
+			itemNro: nro,
+			tipoProduto: $('#h_tipo_produto_' + nro).val()
+		});
+		var estoqueEspecifico = getEstoqueInfo({
+			quantidade: $('#quantidade' + nro).val(),
+			estoqueAtual: $('#h_estoque_atual_esp_' + nro).val(),
+			estoqueMinimo: $('#h_estoque_minimo_esp_' + nro).val(),
+			estoqueMaximo: $('#h_estoque_maximo_esp_' + nro).val(),
+			itemNro: nro,
+			tipoProduto: $('#h_tipo_produto_esp_' + nro).val(),
+			especifico: 'S',
+			especificoDisabled: idConfUniNeg == '0' ? 'S' : ''
+		});
+		$('#estoque_' + nro).html('').append(estoque).append(estoqueEspecifico);
+	}
+}
+
+function iniciarjQuery(nroItem) {
+	$('#produto' + nroItem).autocomplete({
+		source: function(request, response) {
+			$.ajax({
+				'type': 'POST',
+				'dataType': 'json',
+				'url': 'services/produtos.lookup.php?apenasVenda=S&idField=' + nroItem + '&idContato=' + $('#idContato').val() + '&term=' + encodeURIComponent($('#produto' + nroItem).val()),
+				'success': function(data) {
+					response(data);
+					executeDebounceSaldoLookup(data, $('#idConfUnidadeNegocio').val(), atualizarHtmlSaldoLookup);
+				}
+			});
+		},
+		select: function(event, ui) {
+			setIdProdutojQuery(ui.item);
+			testDuplicated();
+			testCompleter('#produto' + nroItem, $('#produto' + nroItem + 'Id'), 'Produto não encontrado no sistema');
+		},
+		change: function(event, ui) {
+			testCompleter('#produto' + nroItem, $('#produto' + nroItem + 'Id'), 'Produto não encontrado no sistema');
+		},
+		fnRenderItemUi: UiAutocompleteItem.codeSaldo,
+		autoFocus: true,
+		delay: 500,
+		minChars: 1,
+		selectOnly: true
+	});
+}
+
+function totalItem(qtd , valor, campoTotal, calcTotal, campoAlqComissao, campoBaseComissao, campoValorComissao, descontoItem, campoIdLinhaProduto, alqIPI, calcularIPIST) {
+	if ($('#precoLista').val() == ',NaN') {
+		$('#precoLista').val($('#precounitario').val());
+	}
+	var total;
+	if ($('#quantidade').val() == '0') {
+		$('#quantidade').val('1');
+		qtd = '1';
+	} else {
+		qtd = parseFloat(nroUsa($('#' + qtd).val()));
+	}
+	valor = parseFloat(nroUsa($('#' + valor).val()));
+	if ($('#valorIPI').val() != 'N') {
+		if ((alqIPI == undefined) || (alqIPI == '')) {
+			alqIPI = 0;
+		} else {
+			alqIPI = parseFloat(nroUsa(document.getElementById(alqIPI).value));
+		}
+	}
+	iAlqComissao = parseFloat(nroUsa($('#' + campoAlqComissao).val()));
+	total = (qtd * valor);
+	total = nroBra(total.toString());
+	if (total == 'NaN' ) {
+		total = '0,00';
+	}
+	$('#' + campoTotal).val(total);
+	$('#' + campoBaseComissao).val(total);
+	var valorComissao = nroBra((parseFloat(nroUsa(total)) * iAlqComissao / 100).toString());
+	if (valorComissao == ',NaN' ) {
+		valorComissao = '0,00';
+	}
+	$('#' + campoValorComissao).val(valorComissao);
+	totalVenda(calcularIPIST);
+	if (calcTotal != 'N') {
+		totalGeral();
+	}
+}
+
+function totalVenda(calcularIPIST) {
+	if (calcularIPIST != false) {
+		calcularIPIST = true;
+	}
+	var subTotal = 0;
+	var totalQtds = 0;
+	var totalIPI = 0;
+	var pesoBruto = 0;
+	precos = $('input[name="itens[precounitario][]"]');
+	quantidades = $('input[name="itens[quantidade][]"]');
+	pesos = $('input[name="itens[peso][]"]');
+	if ($('#valorIPI').val() != 'N') {
+		ipis = $('input[name="itens[alqIPI][]"]');
+	}
+	for (i=0; i<precos.length; i++) {
+		if (precos[i].value == '') {
+			precos[i].value = 0;
+		}
+		if (quantidades[i].value == '') {
+			quantidades[i].value = 0;
+		}
+		if ($('#valorIPI').val() != 'N') {
+			if ((ipis[i].value == '') || (ipis[i].value == undefined)) {
+				ipis[i].value = 0;
+			}
+		}
+		if (pesos[i].value == 'undefined') {
+			pesos[i].value = 0;
+		}
+		var preco = parseFloat(nroUsa(precos[i].value));
+		var qtd = parseFloat(nroUsa(quantidades[i].value));
+		totalQtds += qtd;
+		var desc = 0;
+		subTotal += nroUsaFloat(nroBra(preco * qtd));
+		if ($('#valorIPI').val() != 'N') {
+			if ((alqIPI == undefined) || (alqIPI == '')) {
+				var alqIPI = 0;
+			}
+			var alqIPI = parseFloat(nroUsa(ipis[i].value));
+			totalIPI += (preco * qtd * alqIPI / 100);
+		}
+		pesoBruto += parseFloat(nroUsa(pesos[i].value)) * qtd;
+	}
+	totalIPI = nroBra(totalIPI);
+	subTotal = nroBra(subTotal);
+	if ($('#valorIPI').val() != 'N' && calcularIPIST == true) {
+		document.getElementById('totalIPI').value = totalIPI;
+	}
+	if($('#vendasPesoCalculado').val() == 'S'){
+		$('#pesoBruto').val(nroBraDecimais(pesoBruto,3));
+	}
+	$('#divSubtotal').val(subTotal);
+	$('#subtotal').val(subTotal);
+	$('#campoTotalQtds').val(nroBra(totalQtds));
+}
+
+function totalGeral() {
+	if ($('#valorIPI').val() != 'N') {
+		var totalIPI = nroUsaFloat($('#totalIPI').val());
+	}
+	var total = nroUsa($('#subtotal').val());
+	var posicao = verificaParcela();
+	if ($('#desconto').val() == '') {
+		$('#desconto').val('0');
+	}
+	if ($('#outrasDespesas').val() == '') {
+		$('#outrasDespesas').val('0,00');
+	}
+	var desconto = Math.abs(nroUsaFloat($('#desconto').val()));
+	if (posicao == -1) {
+		$('#desconto').val(nroBra(desconto));
+	} else {
+		if (desconto > 100) {
+			$('#desconto').val('100,00%');
+			desconto = toFixedFix(parseFloat(100 * total) / 100, 2, true);
+		} else {
+			$('#desconto').val(nroBra(desconto) + '%');
+			desconto = desconto * total / 100;
+		}
+	}
+
+	total -= roundDecimals(desconto, 2);
+	var valorFrete = 0;
+	if ($('#frete').val() == '' || typeof($('#frete').val()) == 'undefined') {
+		valorFrete = 0;
+	} else {
+		valorFrete = $('#frete').val();
+	}
+	valorFrete = nroUsaFloat(valorFrete);
+	total += valorFrete;
+	var impostosVenda = nroUsa($('#impostos').val());
+	if (impostosVenda > 0) {
+		total -= impostosVenda;
+	}
+	if ($('#valorIPI').val() != 'N') {
+		total += nroUsaFloat($('#totalIPI').val()) || 0;
+		total += nroUsaFloat($('#totalICMS').val()) || 0;
+	}
+	var outrasDespesas = nroUsaFloat($('#outrasDespesas').val());
+	if (outrasDespesas <= 0) {
+		$('#outrasDespesas').val('0,00');
+	} else {
+		$('#outrasDespesas').val(nroBra(outrasDespesas));
+		total += outrasDespesas;
+	}
+
+	total = nroBra(total, 2);
+	$('#divTotal').val(total);
+	$('#total').val(total);
+	atualizarParcelas();
+	atualizarComissoes(nroUsa($('#subtotal').val()), roundDecimals(desconto, 2));
+	atualizarTotalDescontos();
+	atualizarTotalComissao();
+}
+
+function atualizarTotalComissao() {
+	var totalComissao = 0;
+	$.each($('input[name="itens[vlr_comissao][]"]'), function() {
+		totalComissao += nroUsaFloat($(this).val());
+	});
+	$('#divTotalComissao').val(nroBra(totalComissao));
+}
+
+function atualizarTotalDescontos() {
+	var quantidades = $('input[name="itens[quantidade][]"]');
+	var precosLista = $('input[name="itens[precoLista][]"]');
+	var descontos = $('input[name="itens[descontoItem][]"]');
+
+	var totalDescontoProdutos = 0;
+	var desconto = 0;
+	var posicao = verificaParcela();
+	if (precosLista.length > 0) {
+		for (var i = 0; i < precosLista.length; i++) {
+			totalDescontoProdutos += (parseFloat(nroUsa(precosLista[i].value || 0)) * parseFloat(nroUsa(descontos[i].value  || 0)) / 100) * parseFloat(nroUsa(quantidades[i].value  || 0));
+		}
+
+		desconto = nroUsaFloat($('#desconto').val());
+		if (posicao != -1) {
+			var totalItens = parseFloat(nroUsa($('#divSubtotal').val()));
+			desconto = parseFloat(desconto * totalItens) / 100;
+		}
+
+		$('#divTotalDesconto').val(nroBra(desconto + totalDescontoProdutos));
+		$('#divTotalDescontoItens').val(nroBra(totalDescontoProdutos));
+	}
+}
+
+function salvar() {
+	$('#botaoSalvar').prop('disabled', true);
+	if ($('#produto').val() != '') {
+		addDetailItem();
+	}
+	displayWait('pleasewait', true, 'Salvando informações da venda, aguarde...');
+	i = 0;
+	auxEstruturaDosProdutos = [];
+	$.each(estruturaDosProdutos, function(j){
+		auxEstruturaDosProdutos[i] = estruturaDosProdutos[j];
+		i++;
+	});
+	if (readCookie('tourInsertVendaFinished') == null) {
+		createCookie('tourInsertVendaFinished', true);
+		try{
+    		  endTour();
+		}catch(error){}
+	}
+	if ($('#selectTiposContato').val() != null) {
+		$('#tiposContato').val($('#selectTiposContato').val().toString());
+	} else {
+		$('#tiposContato').val('');
+	}
+
+	salvarVenda($('#id').val(), xajax.getFormValues('vendaForm'), auxEstruturaDosProdutos, '', volumesLogistica);
+}
+function desabilitarCampos() {
+	$('input, .tree-select:not(#categoria)').attr('readonly', 'readonly');
+	$('select, #divSeletorTipoCotacao button').attr('disabled', 'disabled');
+	$('.input_textarea').attr('disabled', false);
+	$('input:radio').attr('disabled', 'disabled');
+	$('#trh').hide();
+	$('.fa-trash-alt').parent().parent().hide();
+	$('.icon-search').hide();
+	$('.button-new').hide();
+	$('#botaoCancelar').attr('value', 'Fechar');
+	$('#botaoCalcularParc').hide();
+	$('#aNovaLinhaItem').hide();
+	$('#aNovaLinhaParcela').hide();
+	$('#add_novo_volume').hide();
+	$('#pag_aNovaLinhaParcela').hide();
+	$('#pag_botaoCalcular').hide();
+	$('a[name*=consultarCotacao]').parent().hide();
+	habilitaElementosPesquisaDeProdutosNoHistoricoDoCliente();
+}
+
+//Mantém sempre habilitado os elementos de pesquisa de produtos no historico do cliente
+function habilitaElementosPesquisaDeProdutosNoHistoricoDoCliente() {
+	$('#descricaoProdutoBuscaHistorico').prop('readonly', false);
+	$('#btBuscarHistoricoVendasProdutoCliente').show();
+}
+
+function habilitarCampos() {
+	$('input, .tree-select').removeAttr('readonly');
+	$('.input_textarea').attr('disabled', false);
+	if ($('#parametroEditarNumeroPedido').val() == 'N') {
+		$('#numeroPedido').attr('readonly', 'readonly');
+	}
+	$('#divSubtotal').attr('readonly', 'readonly');
+	if ($('#valorIPI').val() != 'N') {
+		$('#totalIPI').attr('readonly', false);
+	}
+	$('#campoTotalQtds').attr('readonly', 'readonly');
+	$('#divTotal').attr('readonly', 'readonly');
+	$('#divTotalDescontoItens').attr('readonly', 'readonly');
+	$('#divTotalDesconto').attr('readonly', 'readonly');
+	$('#divTotalComissao').attr('readonly', 'readonly');
+	$('#divNumeroItens').attr('readonly', 'readonly');
+	$('#codigoCorreios').attr('readonly', 'readonly');
+	$('#precototal').attr('readonly', 'readonly');
+	$('#precoLista').attr('readonly', 'readonly');
+	$('#vlr_comissao').attr('readonly', 'readonly');
+	$('#base_comissao').attr('readonly', 'readonly');
+	$('#adicionais_base').attr('readonly', 'readonly');
+	$('#numeroPedidoDaLojaVirtual').attr('readonly', 'readonly');
+	$('#origemPedidoDaLojaVirtual').attr('readonly', 'readonly');
+	$('#origemPedidoCanalDeVenda').attr('readonly', 'readonly');
+	$('#nroProposta').attr('readonly', 'readonly');
+	$('#impostos').attr('readonly', 'readonly');
+	$('select, #divSeletorTipoCotacao button, input:radio').removeAttr('disabled');
+	$('#itens').show();
+	$('#trh').show();
+	$('.fa-trash-alt').parent().parent().show();
+	$('.icon-search').show();
+	$('.button-new').show();
+	$('#botaoSalvar').show();
+	$('#botaoCancelar').attr('value', 'Cancelar');
+	$('#botaoCalcularParc').show();
+	$('#aNovaLinhaItem').show();
+	$('#aNovaLinhaParcela').show();
+	$('#add_novo_volume').show();
+	$('#pag_aNovaLinhaParcela').show();
+	$('#pag_botaoCalcular').show();
+	$('a[name*=consultarCotacao]').parent().show();
+}
+
+function adicionarLinhaItem() {
+	$('#quantidade').blur();
+	if ($('#itens').css('display') != 'none') {
+		if ($('#quantidade').val() == 0 && $('#produto').val() != '') {
+			$('#quantidade').val(1);
+		}
+		totalItem('quantidade', 'precounitario', 'precototal', 'N', 'alq_comissao', 'base_comissao', 'vlr_comissao', 'descontoItem', 'idLinhaProduto', 'alqIPI');
+		addDetailItem();
+	}
+	$('.comissao').hide();
+	$('.item').show();
+	$('.bling-tabs > li > a').removeClass('active');
+	$('#activeItens').addClass('active');
+	$('#produtoId').val('');
+	$('#produto').val('');
+	$('#quantidade').val('');
+	$('#precounitario').val('');
+	$('#precototal').val('');
+	$('#base_comissao').val('');
+	var tmpComissao = comissaoGetComissao($('#descontoItem').val(), $('#idLinhaProduto').val());
+	$('#alq_comissao').val(nroBra(tmpComissao.toString()));
+	$('#vlr_comissao').val('');
+	$('#precoLista').val('');
+	$('#codigo').val('');
+	$('#descricaoDetalhada').val('');
+	$('#precounitario').removeClass('preco-abaixo');
+	$('#produto').removeClass('ac_warning');
+	$('#itens').show();
+	tipoProduto = 'P';
+	$('#produto').focus();
+}
+
+function vincularEnventosCamposLinha() {
+	$('#itens > td > input').each(function() {
+		$(this).bind('blur', function(e) {
+			t = setTimeout(function() { addDetailItem(); }, 1000);
+		});
+		$(this).bind('focus', function(e) {
+			clearTimeout(t);
+		});
+	});
+}
+
+function limparEventoTimeout() {
+	clearTimeout(t);
+}
+
+function limparCodigoProduto(event, nroItem) {
+	if ((event.keyCode <= 8) || ((event.keyCode >= 46) && (event.keyCode <= 111)) || (event.keyCode >= 186)) {
+		$('#produto' + nroItem + 'Id').val(0);
+		$('#idVendaItem' + nroItem + 'Id').val(0);
+	}
+}
+
+function verificaParcela() {
+	var valor, pos;
+	valor = $('#desconto').val();
+	pos = valor.indexOf('%');
+	return pos;
+}
+
+function diferencaPrecos(preUnit, preLista, desconto, origem, recalcula) {
+	idLinhaProduto = desconto.substring(12);
+	var tmpComissao = comissaoGetComissao($('#descontoItem' + idLinhaProduto).val(), $('#idLinhaProduto' + idLinhaProduto).val());
+	$('#alq_comissao' + idLinhaProduto).val(nroBra(tmpComissao.toString()));
+	var valorLista = parseFloat(nroUsa($('#' + preLista).val()));
+	var valorUnitario = parseFloat(nroUsa($('#' + preUnit ).val()));
+	var percentual = parseFloat(nroUsa($('#' + desconto).val()));
+	if (recalcula != false) {
+		recalcula = true;
+	}
+	if (percentual <= 0) {
+		percentual = 0;
+	}
+	if (recalcula) {
+		if (origem == 'percentual') {
+			if (valorUnitario <= valorLista || percentual > 0) {
+				valorUnitario = valorLista - (valorLista * percentual / 100);
+				if (valorUnitario <= 0) {
+					valorUnitario = 0;
+				}
+			}
+			$('#' + preUnit).val(nroBraDecimais(valorUnitario, $('#dec_valor').val()));
+			$('#' + desconto).val(nroBra(percentual));
+		} else if(! isNaN(valorUnitario)) {
+			if (valorLista > 0) {
+				percentual = (valorLista - valorUnitario) / valorLista * 100;
+				if (percentual < 0) {
+					percentual = 0;
+				}
+			} else {
+				percentual = 0;
+			}
+			$('#' + desconto).val(nroBra(percentual));
+		}
+	}
+	var ind = 0;
+	if (parseFloat(nroUsa($('#' + preUnit ).val())) < parseFloat(nroUsa($('#' + preLista).val()))) {
+		$('#' + preUnit ).addClass('preco-abaixo');
+	} else {
+		$('#' + preUnit ).removeClass('preco-abaixo');
+	}
+	$('.preco-abaixo').each(function() {
+		ind ++;
+	});
+	if (ind > 0) {
+		montarMsgPrecoAbaixo();
+	} else {
+		$('.warn-preco-abaixo').hide();
+	}
+}
+
+function validarLimiteDescontoVendedor() {
+	xajax_validarLimiteDescontoVendedor(xajax.getFormValues('vendaForm'), function(res){
+		if (res && Object.keys(res)) {
+			$.each(res, function(index, value) {
+				if (value.title) {
+					$('#descontoItem'+ index).removeClass('tipsyOff');
+					$('#descontoItem'+ index).addClass('warning');
+					$('#descontoItem'+ index).addClass('ac_error');
+					$('#descontoItem'+ index).attr('title', value.title);
+					$('#descontoItem'+ index).tipsy({gravity: $.fn.tipsy.autoWE});
+				} else {
+					$('#descontoItem'+ index).removeClass('warning');
+					$('#descontoItem'+ index).removeClass('ac_error');
+					$('#descontoItem'+ index).removeAttr('title');
+					$('#descontoItem'+ index).addClass('tipsyOff');
+				}
+			});
+		}
+
+		if (res.descontoForaLimite) {
+			montarMsgDescontoForaLimite();;
+		} else {
+			$('.warn-desconto-acima').hide();;
+		}
+	});
+}
+
+function validarLimiteDescontoGeralVendedor() {
+	xajax_validarLimiteDescontoGeralVendedor(xajax.getFormValues('vendaForm'), function(res){
+		if (res.title) {
+			$('#desconto').removeClass('tipsyOff');
+			$('#desconto').addClass('warning');
+			$('#desconto').addClass('ac_error');
+			$('#desconto').attr('title', res.title);
+			$('#desconto').tipsy({gravity: $.fn.tipsy.autoWE});
+		} else {
+			$('#desconto').removeClass('warning');
+			$('#desconto').removeClass('ac_error');
+			$('#desconto').removeAttr('title');
+			$('#desconto').addClass('tipsyOff');
+		}
+	});
+}
+
+function obterPedidoVendaXML(arquivo) {
+	$('#btnImportXML').attr('disabled', true);
+	if (arquivo != '') {
+		clearForm();
+		displayForm();
+		displayWait('pleasewait');
+		xajax_obterPedidoVendaXML(arquivo);
+	} else {
+		$('#btnImportXML').removeAttr('disabled');
+	}
+}
+
+function obterPedidoVendaArquivoCRNET(arquivo) {
+	$('#btnImportCrNet').attr('disabled', true);
+	if (arquivo != '') {
+		displayWait('pleasewait');
+		xajax_obterPedidoVendaArquivoCRNET(arquivo);
+	} else {
+		$('#btnImportCrNet').removeAttr('disabled');
+	}
+}
+
+function montarMsgPrecoAbaixo() {
+	var msg = 'Os preços destacados em amarelo estão abaixo de seus respectivos preços de lista!';
+	$('.warn-preco-abaixo').html(msg);
+	$('.warn-preco-abaixo').show();
+}
+
+function montarMsgDescontoForaLimite() {
+	var msg = 'Os descontos destacados em amarelo estão acima do limite cadastrado para este vendedor!';
+	$('.warn-desconto-acima').html(msg);
+	$('.warn-desconto-acima').show();
+}
+
+function mensagemImportacaoCRNet() {
+	$('#mensagemCrNet').removeClass('nomessage');
+	$('#btnImportCrNet').removeAttr('disabled');
+	$('#btnImportCrNet').hide();
+	$('#uploadify').hide();
+	$('#uploadifyUploader').hide();
+}
+
+//ESTRUTURA
+function editarEstrutura(id){
+	if (! itemClicado) {
+		if ($('#formatoProduto' + id).val() == 'V') {
+			alert('Não é possível gerenciar componentes em produtos no formato de variação.');
+			return;
+		}
+		itemClicado = true;
+		itemEdicaoTemp = null;
+		if ((estruturaDosProdutos[id] != null) && (estruturaDosProdutos[id] != '')) {
+			itemEdicaoTemp = jQuery.extend(true, {}, estruturaDosProdutos[id]); //clona o objeto
+		} else {
+			itemEdicaoTemp = null;
+		}
+		idItemEdicaoTemp = id;
+		var dialog = {
+			content: $('#form_edicao_estrutura'),
+			config: {
+				title: $('#produto' +id).val(),
+				width: 648,
+				height: 350
+			},
+			textOk: 'Salvar',
+			fnOk: function() {
+				salvarItemEdicao();
+				// Zera idVendaItem para excluir estrutura e gravar o produto novamente
+				$('#idVendaItem' + id + 'Id').val(0);
+			},
+			fnCancel: function() {
+				cancelarEdicaoItem();
+			},
+			fnCreate: function() {
+				ajustarFormEdicaoItem();
+			}
+		};
+		createDialog(dialog);
+	}
+}
+
+function ajustarFormEdicaoItem() {
+	limparFormEdicaoItem();
+	itemClicado = false;
+	montarTelaEdicaoComponente();
+}
+
+function closeMessage(){
+	Boxy.get('#controls-popup').hide();
+}
+
+function cancelarEdicaoItem(){
+	itemTempEdicao = {};
+	limparFormEdicaoItem();
+}
+
+function limparFormEdicaoItem() {
+	$('#gritens_estrutura > tbody > tr').each(function() {
+		if (($(this).attr('id') != 'itens_header_estrutura') && ($(this).attr('id') != 'itens_estrutura')) {
+			$(this).remove();
+		}
+	});
+	$('#itemNumberEstrutura').val('-1');
+	$('#estoqueEstrutura').attr('readonly', 'readonly');
+	$('#quantidadeEstruturaTotal').attr('readonly', 'readonly');
+	$('#produtoEstrutura').removeClass('ac_error')
+						  .addClass('tipsyOff')
+						  .removeAttr('title');
+}
+
+function montarTelaEdicaoComponente(){
+	iniciarAutoCompleteDosComponentes('');
+	vincularEnventosCamposLinhaEstrutura();
+	initFormatterField($('#dec_qtde').val(), $('#quantidadeEstrutura'));
+	$('#edQuantidadeDoProduto').val($('#quantidade' + idItemEdicaoTemp).val());
+	addDetailsEstrutura(itemEdicaoTemp);
+}
+
+function setArrayEstruturaDoProduto(dados, idx) {
+	if (idx == '-1') {
+		itemTemp = dados;
+	} else {
+		delete estruturaDosProdutos[idx];
+		estruturaDosProdutos[idx] = dados;
+	}
+}
+
+function setArrayEstruturaDeTodosProdutos(dados) {
+	$.each(dados, function(nro, item) {
+		estruturaDosProdutos[nro] = item;
+	});
+}
+
+function incluirEEditarItem(idEx){
+	if (idEx >= 0) {
+		editarEstrutura(idEx);
+	} else {
+		addDetailItem('S');
+	}
+}
+
+function setIdProdutoEstruturajQuery(param) {
+	$('#produtoEstrutura' + param.idField + 'Id').val(param.id);
+	$('#produtoEstrutura' + param.idField).removeClass('ac_error')
+										  .addClass('tipsyOff')
+										  .removeAttr('title')
+										  .focus();
+}
+
+function removeDetailItemEstrutura(ni) {
+	var nroItensEstrutura = 0;
+	$('#gritens_estrutura > tbody > tr').each(function() {
+		if ($(this).css('display') != 'none') {
+			nroItensEstrutura ++;
+		}
+	});
+	if (nroItensEstrutura > 0) {
+		if (ni == -1) {
+			$('#itens_estrutura').hide();
+		} else {
+			$('#detailItemEstrutura' + ni).remove();
+		}
+	} else {
+		$('#produtoEstrutura' + ni + 'Id').val('0');
+		$('#produtoEstrutura' + ni).val('');
+		$('#quantidadeEstrutura' + ni).val('0,00');
+		$('#quantidadeEstruturaTotal' + ni).val('0,00');
+		$('#estoqueEstrutura' + ni).val('');
+	}
+}
+
+function addDetailsEstrutura(itens) {
+	var idsComponentes = [];
+	if(itens) {
+		$.each(itens, function() {
+			if (! this.saldo) {
+				idsComponentes.push(this.idComponente);
+			} else {
+				setarSaldoComponente({'idProduto': this.idComponente, 'saldo': this.saldo});
+			}
+		});
+	}
+
+	if(idsComponentes.length > 0) {
+		obterEstoquesDasEstruturas(idsComponentes);
+	}
+
+	$('#gritens_estrutura').hide();
+	var c = 0;
+	if (itens != null) {
+		$.each(itens, function(nro, item) {
+			addDetailEstrutura(nro, item.idComponente, item.nome, item.quantidade, item.saldo);
+			c++;
+		});
+	}
+	if (c > 0) {
+		$('#itens_estrutura').hide();
+		$('#trh_estrutura').hide();
+		var nroEstrutura = c -1;
+		$('#itemNumberEstrutura').val(nroEstrutura);
+	} else {
+		$('#itens_estrutura').show();
+		$('#trh_estrutura').show();
+	}
+	$('#gritens_estrutura').show();
+}
+
+function obterEstoquesDasEstruturas(idsComponentes) {
+	if(idsComponentes.length <= 0) {
+		return false;
+	}
+
+	xajax_obterEstoqueProdutos(idsComponentes, function(saldos) {
+		$.each(saldos, function(idProduto, saldo) {
+			setarSaldoComponente({'idProduto': idProduto, 'saldo': saldo});
+			if(itemEdicaoTemp) {
+				$.each(itemEdicaoTemp, function(key, item) {
+					if(item.idComponente == idProduto) {
+						itemEdicaoTemp[key].saldo = saldo;
+						setarSaldoComponente(item);
+					}
+				});
+			}
+		});
+	});
+}
+
+function setarSaldoComponente(item) {
+	var linhaProduto = $('#gritens_estrutura').find('input[value="'+item.idProduto+'"]');
+	linhaProduto.parents('tr').find('input[name="itensEstrutura[estoqueEstrutura][]"]').val(item.saldo);
+}
+
+function addDetailItemEstrutura() {
+	if ($('#produtoEstrutura').val() != '') {
+		$('#produtoEstrutura').removeClass('ac_error')
+							  .addClass('tipsyOff')
+							  .removeAttr('title');
+		var itemNumberEstrutura;
+		itemNumberEstrutura = $('#itemNumberEstrutura').val();
+		itemNumberEstrutura ++;
+		$('#itens_estrutura').hide();
+		$('#itemNumberEstrutura').val(itemNumberEstrutura);
+
+		if($('#produtoEstruturaId').val() > 0) {
+			obterEstoquesDasEstruturas([$('#produtoEstruturaId').val()]);
+		}
+
+		addDetailEstrutura($('#itemNumberEstrutura').val(), $('#produtoEstruturaId').val(), $('#produtoEstrutura').val(), $('#quantidadeEstrutura').val(), $('#estoqueEstrutura' + itemNumberEstrutura).val());
+		$('#produtoEstrutura').val('');
+		$('#quantidadeEstrutura').val('');
+		$('#quantidadeEstruturaTotal').val('');
+		$('#produtoEstruturaId').val('0');
+		$('#estoqueEstrutura').val('');
+		$('#aNovaLinhaItemEstrutura').focus();
+	}
+}
+
+function addDetailEstrutura(nro, idProd, descr, qtd, saldo) {
+	if (descr == null) {descr = '';}
+	if (idProd == null) {idProd = '0';}
+
+	$('<tr>', {'id': 'detailItemEstrutura' + nro}).insertBefore('#itens_estrutura').hide();
+
+	var readonly = false;
+	if (idProd > 0) {
+		readonly = true;
+	}
+
+	var qtdTotal = nroBraDecimais(parseFloat(nroUsa($('#edQuantidadeDoProduto').val())) * parseFloat(nroUsa(qtd)), $('#dec_qtde').val());
+
+	$('#detailItemEstrutura' + nro).append(
+		$('<td>').append(
+			$('<input>', {'type': 'text', 'class': 'editgrid tipsyOff input_text ui-autocomplete-input', 'id': 'produtoEstrutura' + nro, 'name': 'itensEstrutura[produtoEstrutura][]', 'value':  descr, 'readonly': readonly})
+		),
+		$('<td>').append(
+			$('<input>', {'type': 'text', 'class': 'editgrid tipsyOff input_text ui-autocomplete-input edt-qtde', 'id': 'quantidadeEstrutura' + nro, 'name': 'itensEstrutura[quantidadeEstrutura][]', 'value': qtd, 'readonly': readonly})
+		),
+		$('<td>').append(
+			$('<input>', {'type': 'text', 'class': 'editgrid tipsyOff input_text ui-autocomplete-input', 'id': 'estoqueEstrutura' + nro, 'name': 'itensEstrutura[estoqueEstrutura][]', 'value': saldo, 'readonly': 'readonly'})
+		),
+		$('<td>').append(
+			$('<input>', {'type': 'text', 'class': 'editgrid tipsyOff input_text ui-autocomplete-input edt-qtde', 'id': 'quantidadeEstruturaTotal' + nro, 'value': qtdTotal, 'readonly': 'readonly'})
+		),
+		$('<td>', {'type': 'text', 'id': 'colExclEstrutura' + nro}).append(
+			$('<a>', {'class': 'tableIcon', 'id': 'exclEstrutura' + nro}).append(
+				$('<i>', {'class': 'fas fa-trash-alt'})
+			),
+			$('<input>', {'type': 'hidden', 'id': 'produtoEstrutura' + nro + 'Id', 'name': 'itensEstrutura[produtoEstruturaId][]', 'value': idProd})
+		)
+	);
+	$('#exclEstrutura' + nro).bind('click', function (e) {
+		removeDetailItemEstrutura(nro);
+	});
+	$('#quantidadeEstrutura' + nro).bind('blur', function() {
+		recalcularQtdeTotalItem($('#quantidadeEstrutura' + nro).val(), 'quantidadeEstruturaTotal' + nro);
+	});
+	$('#produtoEstrutura' + nro).bind('onblur', function() {
+		terribleHack(this);
+	});
+	$('#quantidadeEstrutura' + nro).bind('onblur', function() {
+		terribleHack(this);
+	});
+	$('#estoqueEstrutura' + nro).bind('onblur', function() {
+		terribleHack(this);
+	});
+	$('#produtoEstrutura' + nro).bind('keypress', function(e) {
+		clearHidenResult(e, $('#produtoEstrutura' + nro + 'Id'));
+	});
+	initFormatterField($('#dec_qtde').val(), $('#quantidadeEstrutura' + nro));
+	iniciarAutoCompleteDosComponentes(nro);
+	$('#detailItemEstrutura' + nro).show();
+}
+
+function recalcularQtdeTotalItem(qtdUn, campoAtribuir) {
+	if ((parseFloat(nroUsa(qtdUn)) <= 0)) {
+		$('#' + campoAtribuir).val('0,00');
+	} else {
+		var qtdTotal = nroBraDecimais(parseFloat(nroUsa($('#edQuantidadeDoProduto').val())) * parseFloat(nroUsa(qtdUn)), $('#dec_qtde').val());
+		$('#' + campoAtribuir).val(qtdTotal);
+	}
+}
+
+function adicionarLinhaEstruturaItem() {
+	if ($('#itens_estrutura').css('display') != 'none') {
+		if ($('#produtoEstrutura').val() != ''){
+			addDetailItemEstrutura();
+			$('#produtoEstruturaId').val('0');
+			$('#produtoEstrutura').val('');
+			$('#quantidadeEstrutura').val('0,00');
+			$('#quantidadeEstruturaTotal').val('0,00');
+			$('#produtoEstrutura').focus();
+			$('#estoqueEstrutura').val('');
+		}
+	}
+	$('#produtoEstruturaId').val('0');
+	$('#produtoestrutura').val('');
+	$('#quantidadeEstrutura').val('0,00');
+	$('#quantidadeEstruturaTotal').val('0,00');
+	$('#descricaoDetalhada').val('');
+	$('#estoqueEstrutura').val('');
+	$('#itens_estrutura').show();
+	$('#produtoEstrutura').removeClass('ac_error')
+						  .addClass('tipsyOff')
+						  .removeAttr('title')
+						  .focus();
+	$('#produtoEstrutura').autocomplete('destroy');
+	var tipoEstoqueComposicao = $('#tipoEstoque' + idItemEdicaoTemp).val();
+	var filtrarEstruturas = (tipoEstoqueComposicao == 'V' ? 'S' : 'N');
+	iniciarAutoCompleteDosComponentes('', filtrarEstruturas);
+}
+
+function iniciarAutoCompleteDosComponentes(nroItem, filtrarEstruturas) {
+	$('#produtoEstrutura' + nroItem).autocomplete({
+		source: function(request, response) {
+			$.ajax({
+				type: 'POST',
+				dataType: 'json',
+				url: 'services/produtos.lookup.php?apenasVenda=S&exibeSoProdutos=S&idField=' + nroItem + '&filtrarEstruturas=' + (filtrarEstruturas || 'N') + '&term=' + encodeURIComponent($('#produtoEstrutura' + nroItem).val()),
+				success: function(data) {
+					response(data);
+					executeDebounceSaldoLookup(data, $('#idConfUnidadeNegocio').val(), atualizarHtmlSaldoLookup);
+				}
+			});
+		},
+		select: function(event, ui) {
+			setIdProdutoEstruturajQuery(ui.item);
+		},
+		change: function(event, ui) {
+			testCompleter($(this), $('#produtoEstrutura' + nroItem + 'Id'), 'Produto não encontrado no sistema');
+		},
+		fnRenderItemUi: UiAutocompleteItem.codeSaldo,
+		delay: 500,
+		minLength:2,
+		selectOnly: true
+	});
+}
+
+function vincularEnventosCamposLinhaEstrutura() {
+	$('#itens_estrutura > td > input').each(function() {
+		$(this).unbind('blur');
+		$(this).unbind('focus');
+		$(this).bind('blur', function(e) {
+			tEstrutura = setTimeout(function() { addDetailItemEstrutura(); }, 1000);
+		});
+		$(this).bind('focus', function(e) {
+			clearTimeout(tEstrutura);
+		});
+	});
+}
+
+function cancelarInclusaoComponente() {
+	$('#produtoEstruturaId').val('0');
+	$('#produtoEstrutura').val('');
+	$('#quantidadeEstrutura').val('');
+	$('#quantidadeEstruturaTotal').val('0,00');
+	$('#estoqueEstrutura').val('');
+	clearTimeout(tEstrutura);
+	$('#itens_estrutura').hide();
+}
+
+function salvarItemEdicao(){
+	if (($('#itens_estrutura').css('display') != 'none')) {
+		addDetailItemEstrutura();
+	}
+	var componenteId = $('input[name="itensEstrutura[produtoEstruturaId][]"]');
+	var descricaoComponente = $('input[name="itensEstrutura[produtoEstrutura][]"]');
+	var qtdComponente = $('input[name="itensEstrutura[quantidadeEstrutura][]"]');
+	var saldos = $('input[name="itensEstrutura[estoqueEstrutura][]"]');
+	var i = 0;
+	var arrayEstruturaGeral = {};
+	for (i = 0; i < componenteId.length; i ++) {
+		arrayEstruturaGeral[i] = {};
+		arrayEstruturaGeral[i].idComponente = componenteId[i].value;
+		arrayEstruturaGeral[i].saldo = saldos[i].value;
+		if (componenteId[i].value > 0) {
+			arrayEstruturaGeral[i].nome = descricaoComponente[i].value;
+		} else {
+			arrayEstruturaGeral[i].nome = '';
+		}
+		arrayEstruturaGeral[i].quantidade = qtdComponente[i].value;
+	}
+
+	estruturaDosProdutos[idItemEdicaoTemp] = arrayEstruturaGeral;
+	itemTempEdicao = null;
+	idItemEdicaoTemp = -1;
+}
+
+function limparEstruturaDoProduto(nroItem){
+	if (($('#produto' + nroItem + 'Id').val() <= 0)) {
+		delete estruturaDosProdutos[nroItem];
+	}
+}
+
+function atualizarNumeroItens(acao){
+	var nroItens = parseInt($('#divNumeroItens').val());
+	if (acao == 'soma') {
+		nroItens++;
+	} else {
+		if (nroItens > 0) {
+			nroItens--;
+		}
+	}
+	$('#divNumeroItens').val(nroItens);
+}
+
+function exibirOcultarAdicionais(){
+	$('#divTextoExibirOcultarAdicionais').slideToggle('fast');
+}
+
+function exibirOcultarTransportador(){
+	$('#divTextoExibirOcultarTransportador').slideToggle('fast');
+	if ($('#textoExibirOcultarTransportador').html() == 'ocultar') {
+		$('#textoExibirOcultarTransportador').html('exibir');
+	} else {
+		$('#textoExibirOcultarTransportador').html('ocultar');
+	}
+}
+
+function alinharIconesPorTipo(){
+	var existemProdutos = $('input[id*="h_tipo_produto_"][value="P"]');
+	if (existemProdutos.length === 0) {
+		$('a[id*="informacoes_adicionais_produto"]').css('float', 'initial');
+	} else {
+		$('a[id*="informacoes_adicionais_produto"]').css('display', 'inline-block');
+	}
+}
+
+function exibirVendasFinanceiro(){
+	if ($('#idContato').val() > 0) {
+		$('#iconInfo').attr('class', 'icon-info-sign');
+		$('.input_icones').css('right', '1px');
+		$('#iconWarning').attr('class', '');
+	} else {
+		$('#iconInfo').attr('class', '');
+		$('.input_icones').css('right', '12px');
+		$('#iconWarning').attr('class', 'icon-warning-sign');
+		$('.input_icones').css('right', '1px');
+	}
+}
+
+function popoverDescricaoDetalhada(nro, descricaoDetalhada){
+	if (descricaoDetalhada === undefined){
+		descricaoDetalhada = '';
+	}
+
+	$('#descricao_detalhada_produto' + nro).attr('data-id', 'popover' + nro).attr('data-title', 'Descrição Detalhada').attr('data-toggle', 'popover').attr('data-trigger', 'hover').attr('data-container', '#edicao').attr('data-html', true).attr('data-content', descricaoDetalhada.trim() == '' ? 'Clique para inserir' : descricaoDetalhada);
+	$('#opcItem' + nro).unbind().on('mouseenter', function() {
+		$('#descricao_detalhada_produto' + nro).popover().on('show.bs.popover', function(e){
+			$(this).data('bs.popover').tip().addClass('popover-ajuda');
+		});
+	});
+}
+
+function aguardarCallbackItens() {
+	$('#botaoSalvar').attr('disabled', true);
+	itemClicado = true;
+}
+
+function verificarCallbackItens(operacao) {
+	if ($.inArray(operacao, permiteAdicaoItemCallback) == -1) {
+		permiteAdicaoItemCallback.push(operacao);
+	}
+	if (permiteAdicaoItemCallback.length == 5) {
+		$('#botaoSalvar').attr('disabled', false);
+		itemClicado = false;
+	}
+}
+
+function obterItensCubagem(agrupar) {
+	var itens = [];
+
+	$('input[name="itens[produtoId][]"]').each(function () {
+		var qtdItem = $(this).parent().siblings('td[id^="tdQtdItem"]').children();
+		var valorUn = $(this).parent().siblings('td[id^="tdPrecoUnit"]').children();
+		var descricao = $(this).parent().siblings('td[id^="tdProduto"]').children();
+		var codigo = $(this).parent().siblings('td[id^="tdCodigo"]').children();
+		var item = {
+			'id': $(this).val(),
+			'quantidade': Math.ceil(nroUsaFloat($(qtdItem[0]).val())),
+			'valor' : $(valorUn[0]).val(),
+			'descricao' : $(descricao[1]).val(),
+			'codigo' : $(codigo[0]).val()
+		};
+		var index = itens.findIndex(function(listaItem) {
+			return (item.id == listaItem.id);
+		});
+		if (index !== -1 && agrupar) {
+			itens[index].quantidade += item.quantidade;
+		} else {
+			itens.push(item);
+		}
+	});
+
+	return itens;
+}
+
+function limparComissoes() {
+	$('#gritens tbody tr').each(function(i, tr) {
+		$('input[name="itens[adicionais_base][]"]:eq(' + i + ')').val('0,00');
+		$('input[name="itens[alq_comissao][]"]:eq(' + i + ')').val('0,00');
+		$('input[name="itens[vlr_comissao][]"]:eq(' + i + ')').val('0,00');
+	});
+
+	atualizarTotalComissao();
+}

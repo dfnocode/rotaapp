@@ -1,0 +1,224 @@
+var __companyData = [];
+var BlingTracker = {
+	data: [],
+	requestedData: false,
+	TYPES: {MIXPANEL: 'mixpanel'},
+	isIdentified: [],
+	init: function(sendCompanyData) {
+		var that = this;
+		var df = $.Deferred();
+		if (!sendCompanyData) {
+			this.data.id = this.getCompanyId();
+			this.data.trial = this.getCompanyStatus();
+			this.data.user = [];
+			this.data.user.id = this.getUserId();
+			this.data.user.name = this.getUserName();
+			this.data.user.email = this.getUserEmail();
+			df.resolve();
+		} else if (this.data.length) {
+			df.resolve();
+		} else if (this.requestedData) {
+			df.resolve();
+		} else {
+			this.requestedData = true;
+			this.getData().done(function() {
+				that.data = __companyData;
+				df.resolve();
+			});
+		}
+		return df.promise();
+	},
+	track: function(event, properties, types) {
+		properties = properties || [];
+		types = types || [this.TYPES.MIXPANEL];
+		if (properties.sendCompanyData === undefined) {
+			properties.sendCompanyData = false;
+		}
+		var eventProperties = Object.assign({}, properties);
+		var that = this;
+		this.isIdentified = [];
+		this.init(properties.sendCompanyData).done(function() {
+			if (that.data && (that.data.trial || properties.force)) {
+				if (eventProperties.force !== undefined) {
+					delete eventProperties.force;
+				}
+				if (eventProperties.sendCompanyData !== undefined) {
+					delete eventProperties.sendCompanyData;
+				}
+				if (!isLocalhost()) {
+					for (var i = types.length - 1; i >= 0; i--) {
+						var type = types[i];
+						that.identify(properties.sendCompanyData, type).done(function() {
+							if (type == that.TYPES.MIXPANEL) {
+								that.mixpanel(event, eventProperties);
+							}
+						});
+					}
+				} else {
+					console.log(types, event, that.data);
+				}
+			}
+		})
+	},
+	multiTrack: function(event, properties) {
+		properties = properties || [];
+		this.track(event, properties, [this.TYPES.MIXPANEL])
+	},
+	forceTrack: function(event, properties) {
+		properties = properties || [];
+		properties.force = true;
+		this.track(event, properties);
+	},
+	identify: function(sendCompanyData, type) {
+		var data = this.data;
+		var df = $.Deferred();
+		if (!sendCompanyData) {
+			df.resolve();
+			return df.promise();
+		}
+		if (this.data.modulos) {
+			var inArray = function(value, array) {
+				return $.inArray(value, array) > -1
+			}
+			var moduloFiscal = inArray('Fiscal e tributário', this.data.modulos);
+			var moduloVendas = inArray('Vendas', this.data.modulos);
+			var moduloSuprimentos = inArray('Suprimentos', this.data.modulos);
+			var moduloFinanceiro = inArray('Financeiro', this.data.modulos);
+			var moduloIntegracoes = inArray('Integrações', this.data.modulos);
+			var moduloServicos = inArray('Serviços', this.data.modulos);
+		}
+		if (type == this.TYPES.MIXPANEL) {
+			mixpanel.people.set({
+				'$email': data.email,
+				'$first_name': data.nome,
+				'$phone': data.fone,
+				'id': data.id,
+				'plano': data.plano,
+				'sistema': data.sistema,
+				'atividade_principal': data.atividadePrincipal,
+				'porte': data.porte,
+				'trial': data.trial,
+				'situacao': data.situacao,
+				'comercio': data.comercio,
+				'ecommerce': data.ecommerce,
+				'industria': data.industria,
+				'servicos': data.servicos,
+				'modulo_servicos': moduloServicos,
+				'modulo_integracoes': moduloIntegracoes,
+				'modulo_suprimentos': moduloSuprimentos,
+				'modulo_fiscal': moduloFiscal,
+				'modulo_vendas': moduloVendas,
+				'modulo_financeiro': moduloFinanceiro,
+				'dataInscricao': data.dataInscricao
+			});
+			this.isIdentified[type] = true;
+			mixpanel.identify(data.id);
+			df.resolve();
+		}
+		return df.promise();
+	},
+	mixpanel: function(event, properties) {
+		if (!this.isIdentified[this.TYPES.MIXPANEL]) {
+			mixpanel.identify(this.getCompanyId());
+		}
+		mixpanel.track(event, properties);
+	},
+	mixpanel_track_button: function(domElement, additionalInfo, properties) {
+		if (this.getCompanyStatus() && domElement && typeof mixpanel !== 'undefined') {
+			additionalInfo = additionalInfo || '';
+			var that = this;
+			try {
+				domElement.addEventListener('click', function(el) {
+					var event = 'Clicou no ' + domElement.innerText.trim() + ' ' + additionalInfo;
+					var pageTitle = document.querySelectorAll('form h1')[0].innerText.trim() || '';
+					that.mixpanel(event.trim(), {
+						eventType: el.type,
+						page: pageTitle
+					});
+
+				});
+			} catch (e) {
+				console.log('Erro ao atribuir evento: ' + e.message);
+			}
+		}
+	},
+	mixpanel_track_link:function (selector) {
+		if (isLocalhost()) return;
+		if (this.getCompanyStatus() && selector && typeof mixpanel !== 'undefined') {
+			mixpanel.identify(this.getCompanyId());
+			selector = selector.split(',');
+			for (var i = selector.length - 1; i >= 0; i--) {
+				mixpanel.track_links(selector[i].trim(), 'Clicou no link', function(ele) {
+					return {
+						nomeMenu: ele.innerText || ele.attributes.title.value
+					}
+				});
+			}
+		}
+
+	},
+	mixpanelBackend: function(event, properties, updateUser) {
+		updateUser = updateUser || false;
+		if (event) {
+			$.ajax({
+				type: 'post',
+				url: 'utils/requestMethods.php',
+				data: {
+					action: 'trackEventMP',
+					event: event,
+					params: properties || [],
+					updateUser: updateUser
+				}
+			});
+		}
+	},
+	activeCampaign: function(event, properties) {
+		properties = properties || [];
+		$.ajax({
+			type: 'post',
+			url: 'utils/requestMethods.php',
+			data: {
+				action: 'trackEvent',
+				event: event,
+				params: properties
+			}
+		});
+	},
+	getCompanyId: function() {
+		var companyId = this.data.id || document.getElementById('id_company_track_events').value;
+		return companyId;
+	},
+	getCompanyName: function() {
+		var companyName = this.data.nome || document.getElementById('name_company_track_events').value;
+		return companyName;
+	},
+	getCompanyEmail: function() {
+		var companyEmail = this.data.email || document.getElementById('email_company_track_events').value;
+		return companyEmail;
+	},
+	getCompanyState: function() {
+		return this.data.uf || '';
+	},
+	getCompanyStatus: function() {
+		var companyStatus = '';
+		if (this.data.trial != undefined) {
+			companyStatus = this.data.trial;
+		} else {
+			companyStatus = document.getElementById('status_company_track').value == true;
+		}
+		return companyStatus;
+	},
+	getUserId: function() {
+		var userId = this.data.user.id || document.getElementById('id_user_track_events').value;
+		return userId;
+	},
+	getUserEmail: function() {
+		var userEmail = this.data.user.email || document.getElementById('email_user_track_events').value;
+		return userEmail;
+	},
+	getUserName: function() {
+		var userName = this.data.user.name || document.getElementById('name_user_track_events').value;
+		return userName;
+	},
+	getData: getCompanyDataTrackers
+}

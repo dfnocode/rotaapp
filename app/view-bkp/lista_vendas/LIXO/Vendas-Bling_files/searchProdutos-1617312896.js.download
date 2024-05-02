@@ -1,0 +1,180 @@
+function completerProduct(event, field, afterUpdate, apenasVenda, hideDefaultLoading) {
+	apenasVenda = apenasVenda || 'N';
+	hideDefaultLoading = hideDefaultLoading || false;
+	var deferredObj = $.Deferred();
+
+	if (event.keyCode == 13) {
+		if ($('#pleasewait').length > 0 && !hideDefaultLoading) {
+			displayWait('pleasewait');
+		}
+
+		autoCompletarProduto(field, afterUpdate, apenasVenda).done(function() {
+			if (!hideDefaultLoading) {
+				closeWait('pleasewait');
+			}
+
+			deferredObj.resolve();
+		});
+	}
+
+	return deferredObj.promise();
+}
+
+function autoCompletarProduto(field, afterUpdate, apenasVenda) {
+	apenasVenda = apenasVenda || 'N';
+	var deferredObj = $.Deferred();
+	var busca = document.getElementById(field).value;
+	try {
+		xajax_autoCompletarProduto(busca, field, afterUpdate, apenasVenda, function() {
+			deferredObj.resolve();
+		});
+	} catch (e) {
+		srv_estoque_autoCompletarProduto(busca, field, afterUpdate, function() {
+			deferredObj.resolve();
+		});
+	}
+
+	return deferredObj.promise();
+}
+
+function searchProdutos(field,afterUpdate){
+	var busca = document.getElementById(field).value;
+	if(navigator.userAgent.indexOf('MSIE')>=0){
+		hideSelects('hidden')
+	}
+
+	new Boxy.load('templates/form.searchProdutos.popup.php?field='+field+'&busca='+busca+'&afterUpdate='+afterUpdate, {
+		title: "Busca avançada",
+		modal: true,
+		afterShow: ajustarFormSearchProd
+	});
+}
+
+function ajustarFormSearchProd(){
+	var buscaPopup = $("#buscaPopup").val();
+	if(buscaPopup !=""){
+		displayWait('pleasewait');
+		xajax_pesquisarProdutos(xajax.getFormValues('formBuscaProdutos'));
+	}
+	$("#buscaProdutos").focus();
+}
+
+function closeProductMessage() {
+	if(navigator.userAgent.indexOf('MSIE')>=0){
+		hideSelects("visible");
+	}
+
+	Boxy.get("#controls-popup").hide();
+}
+
+function setarProduto(id, nome, field){
+	closeProductMessage();
+	document.getElementById(field).value = nome;
+	document.getElementById(field).focus();
+}
+
+function incluirProdutoRapido(field,afterUpdate){
+	var busca = document.getElementById(field).value;
+	if(navigator.userAgent.indexOf('MSIE')>=0){
+		hideSelects('hidden')
+	}
+
+	new Boxy.load('templates/form.produtoRapido.popup.php?field='+field+'&afterUpdate='+afterUpdate+'&busca='+busca, {
+		title: "Inclusão de produto",
+		modal: true,
+		afterShow: ajustarformInclusaoProd
+	});
+}
+
+function ajustarformInclusaoProd(){
+	$("#codigo").focus();
+}
+
+function actionFieldProducts(event){
+	if(event.keyCode==27){
+		closeProductMessage();
+	}
+}
+
+var existeEstoqueInfo = false;
+function setExisteEstoqueInfo(ee) {
+	existeEstoqueInfo = ee;
+}
+
+function getEstoqueInfo(dadosEstoque) {
+	var qtd = nroUsaFloat(dadosEstoque.quantidade);
+	var eAtual = nroUsaFloat(dadosEstoque.estoqueAtual);
+	var eMin = nroUsaFloat(dadosEstoque.estoqueMinimo);
+	var eMinStr = nroBraDecimais(eMin, $('#dec_qtde').val());
+	var eMax = nroUsaFloat(dadosEstoque.estoqueMaximo);
+	var eMaxStr = nroBraDecimais(eMax, $('#dec_qtde').val());
+	var especificoDisabled = dadosEstoque.especificoDisabled ? true : false;
+	var especifico = dadosEstoque.especifico ? true : false;
+	var idEsp = especifico ? 'esp_' : '';
+	var icone = especifico ? 'cube' : 'cubes';
+	if (existeEstoqueInfo) {
+		qtd = 0;
+	}
+	var tipoProduto = '';
+	if(dadosEstoque.tipoProduto == undefined){
+		tipoProduto = "P";
+	}else{
+		tipoProduto = dadosEstoque.tipoProduto;
+	}
+	var estoqueAposOperacao = (dadosEstoque.tipo == "C" ? eAtual + qtd : eAtual - qtd);
+	var msg = "Estoque atual: " + nroBraDecimais(eAtual, $("#dec_qtde").val()) + "<br>" +
+	  		  "Estoque mínimo: " + eMinStr + "<br>" +
+	  		  "Estoque máximo: " + eMaxStr  + "<br>" +
+	  		  "Estoque depois da " + (dadosEstoque.tipo == "C" ? "compra" : "venda") +": " + nroBraDecimais((existeEstoqueInfo ? eAtual : estoqueAposOperacao), $("#dec_qtde").val()) + "<br>";
+
+	var estoqueInfoHidden = "<input type='hidden' id='h_estoque_atual_" + idEsp + dadosEstoque.itemNro + "' value='" + dadosEstoque.estoqueAtual + "' />" +
+							"<input type='hidden' id='h_estoque_minimo_" + idEsp + dadosEstoque.itemNro + "' value='" + eMinStr + "' />" +
+							"<input type='hidden' id='h_estoque_maximo_" + idEsp + dadosEstoque.itemNro + "' value='" + eMaxStr + "' />" +
+							"<input type='hidden' id='h_tipo_produto_" + idEsp + dadosEstoque.itemNro + "' value='" + tipoProduto + "' />" ;
+
+	if (dadosEstoque.ordemCompra) {
+		msg += "Ordem de compra: " + dadosEstoque.ordemCompra;
+		estoqueInfoHidden += "<input type='hidden' id='h_ordem_compra_" + dadosEstoque.itemNro + "' value='" + dadosEstoque.ordemCompra + "' />";
+	}
+
+	var infoCor = "#3FA36C";
+	if (estoqueAposOperacao < 0) {
+		infoCor = "#DD6F77";
+	} else if (estoqueAposOperacao < eMin) {
+		infoCor = "#FAC63B";
+	}
+
+	dataTitle = especifico ? 'Depósito da loja' : 'Todos os depósitos';
+
+	if(tipoProduto == "P"){
+		if (especificoDisabled) {
+			infoCor = "#CCCCCC";
+			return "<span class='fas fa-" + icone + "' style='color: " + infoCor + "; cursor: not-allowed;'></span>" + estoqueInfoHidden;
+		}
+		return $('<span>', {'class': 'fas fa-'+ icone, 'style': 'color: ' + infoCor + '; cursor: pointer;', 'data-container': 'body', 'data-placement':'left', 'data-trigger': ($(window).width() < 768 ? 'click' : 'hover'), 'data-toggle': 'popover', 'data-html': true, 'data-content': msg, 'data-original-title': dataTitle}).popover().on('show.bs.popover', function(e) {
+			$(this).data('bs.popover').tip().addClass('popover-ajuda');
+		}).append(estoqueInfoHidden);
+	}else{
+		return estoqueInfoHidden;
+	}
+
+}
+
+function mostrarEstoque(event, msg) {
+	flagMouseOver = true;
+	x = event.clientX;
+	y = event.clientY;
+	setTimeout('ativarEstoque(' + x + ', ' + y + ', "' + msg + '")', 500);
+}
+
+function ativarEstoque(x, y, msg) {
+	if (flagMouseOver) {
+		viewPopUp("slotEstoqueProduto", x, y);
+		$("#tplEstoqueProduto").html(msg);
+	}
+}
+
+function cancelarEstoque() {
+	flagMouseOver = false;
+	$("#slotEstoqueProduto").hide();
+}

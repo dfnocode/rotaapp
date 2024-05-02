@@ -1,0 +1,1 @@
+define(["hogan"],function(h){arguments[0]={"autocomplete/translate":h.compile("{{#items}}\n<option value=\"{{_id}}\" {{#multiple}}data-content=\"<span class='label label-default'>{{#pok_ms}}_msvalues{{/pok_ms}}</span>\"{{/multiple}}>\n{{#pok_ms}}_msvalues{{/pok_ms}}\n</option>\n{{/items}}")};return Object.assign.apply(null, arguments)});

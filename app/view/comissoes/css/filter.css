@@ -1,0 +1,212 @@
+.open-filter {
+    cursor: pointer;
+    background: #fff 0% 0% no-repeat padding-box;
+    box-shadow: 0 3px 6px #bbb;
+    border-radius: 5px 10px 10px 0;
+    opacity: 1;
+    width: 35px;
+    height: 30px
+}
+
+.open-filter .fa-filter {
+    color: #2fac66;
+    margin-top: 10px;
+    margin-left: 10px;
+    font-size: 9pt
+}
+
+#container.filter-left {
+    height: auto
+}
+
+#container .filter-left .open>#lista {
+    padding-left: 250px
+}
+
+#container.filter-left #lista {
+    margin-left: 35px
+}
+
+@media(min-width:1920px) {
+    #container.filter-left #lista {
+        position: relative
+    }
+}
+
+#container.filter-left .search-bar {
+    width: 100%;
+    padding: 0 0 0 10px;
+    position: initial;
+    z-index: 0;
+    background: #f2faf8;
+    top: 0
+}
+
+#search-left-area input.form-control,
+#search-left-area select.form-control,
+.form-control {
+    -webkit-box-shadow: none;
+    box-shadow: none;
+    -webkit-transition: none;
+    -o-transition: none;
+    transition: none
+}
+
+#search-left-area input.form-control:focus,
+#search-left-area select.form-control:focus,
+.form-control:focus {
+    border-color: #3faf6c;
+    outline: 0;
+    -webkit-box-shadow: none;
+    box-shadow: none
+}
+
+#search-left-area .form-group {
+    margin-bottom: 10px
+}
+
+#search-left-area .form-group>div[class*=col-md]:first-of-type,
+#search-left-area .form-group>div[class*=col-lg]:first-of-type,
+#search-left-area .form-group>div.hidden[class*=col-md]+div {
+    margin-left: 15px;
+    margin-right: 10px
+}
+
+#search-left-area div[class*=col-md],
+#search-left-area div[class*=col-lg] {
+    width: 42%;
+    padding-left: 0;
+    padding-right: 0
+}
+
+#search-left-area {
+    width: 40px;
+    height: 70%;
+    position: fixed;
+    display: none;
+    border-radius: 20px;
+    margin-left: -5px;
+    transition: 0.5s;
+}
+
+#search-left-area #content-filter {
+    display: none
+}
+
+#search-left-area div#title-filter {
+    position: absolute;
+    top: 0;
+    padding: 5px;
+    padding-top: 10px;
+    width: 90%;
+    background: #fff;
+    z-index: 10;
+    padding-left: 0
+}
+
+#search-left-area #title-filter span.fa-filter {
+    float: left;
+    color: #3faf6b;
+    margin-top: 1px;
+    margin-right: 5px
+}
+
+#search-left-area #title-filter h1 {
+    color: #3f3d3d;
+    font-weight: 700;
+    margin-top: 0;
+    padding: 0;
+    float: left;
+    font-size: 12px;
+    font-family: arial
+}
+
+.border-green {
+    border-right: 4px solid #f2faf8
+}
+
+#search-left-area #title-filter .fa-chevron-left {
+    float: right;
+    cursor: pointer;
+    color: #7fb8db;
+    font-size: 10pt
+}
+
+#search-left-area #title-filter .fa-chevron-left:hover {
+    border-radius: 20px;
+    width: 27px;
+    margin: -5px -10px;
+    padding: 5px;
+    text-align: center
+}
+
+#search-left-area #content-filter form {
+    margin-top: 35px;
+    margin-bottom: 25px
+}
+
+#search-left-area.open #content-filter {
+    display: block;
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+    padding: 0 13px
+}
+
+#modal-filter .ui-dialog-titlebar,
+#modal-filter .ui-dialog-titlebar-close,
+#modal-filter .ui-dialog-content,
+#modal-filter .ui-dialog-content .ui-dialog-buttonpane,
+#search-left-area.open,
+#search-left-area #filter-button-area,
+#search-left-area .over-shadow {
+    background: #fff
+}
+
+#search-left-area.open {
+    cursor: auto;
+    overflow: visible;
+    box-shadow: 0 3px 6px #00000029;
+    border-radius: 0 10px 10px 0
+}
+
+#search-left-area.open .open-filter {
+    display: none
+}
+
+#search-left-area #content-filter::-webkit-scrollbar,
+#search-left-area .tree-select-container ul::-webkit-scrollbar {
+    width: 7px
+}
+
+#search-left-area #content-filter::-webkit-scrollbar-track,
+#search-left-area .tree-select-container ul::-webkit-scrollbar-track {
+    box-shadow: inset 0 0 5px gray
+}
+
+#search-left-area #content-filter::-webkit-scrollbar-thumb,
+#search-left-area .tree-select-container ul::-webkit-scrollbar-thumb {
+    background: #7f7f7f
+}
+
+#search-left-area #content-filter::-webkit-scrollbar-thumb:hover,
+#search-left-area .tree-select-container ul::-webkit-scrollbar-thumb:hover {
+    background: #666
+}
+
+table.comissoes_por_periodo tr {
+    cursor: pointer;
+}
+
+@media screen and (max-width: 400px) {
+    #search-left-area {
+        display: none;
+    }
+    #open-filter2 {
+        display: block;
+        border-radius: 10px;
+        margin-left: 2px;
+        position: absolute;
+        top: 60px;
+    }
+}

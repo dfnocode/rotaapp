@@ -1,0 +1,154 @@
+function imprimirComprovanteNaoFiscal(params) {
+	var comprovantes = $('<div>', {'class': 'w30'});
+	var ultVenda = Object.keys(params.vendas).pop();
+	var fontSize = 'font-size:' + params.tamanhoFonte + 'pt;';
+
+	$.each(params.vendas, function(i, venda) {
+		var descontoItens = 0;
+		var totalItens = 0;
+
+		var infoItens = $('<table>', {'id': 'comprovante_nao_fiscal'}).append(
+			$('<thead>').append(
+				$('<tr>', {'class': 'border-bottom'}).append(
+					(params.exibirCodigoProduto ? $('<th>', {'text': 'Código', 'class': 'text_left'}) : ''),
+					$('<th>', {'text': 'Item', 'class': 'text_left wh50'}),
+					$('<th>', {'text': 'Qtde', class: 'text_right wh10'}),
+					(params.exibirLocalizacao ? $('<th>', {'text': 'Localização', 'class': 'text_left wh20'}) : ''),
+					(params.exibirDescontoItens ? $('<th>', {'text': 'Desc(%)', 'class': 'text_right wh20'}) : ''),
+					$('<th>', {'text': 'Valor', 'class': 'text_right wh10'}),
+					$('<th>', {'text': 'Total', 'class': 'text_right wh10'})
+				)
+			),
+			$('<tbody>', {'class': 'rcpt-items'}).append(
+				$.map(venda.itens, function(item) {
+					descontoItens += parseFloat(item.precoLista * item.quantidade) * (parseFloat(item.descontoItem) / 100);
+					totalItens += item.quantidade * item.valor;
+
+					var htmlItem = $('<tr>', {'class': (!params.exibirComentarioItens || (params.exibirComentarioItens && $.trim(item.obs) == '') ? 'border-bottom' : '')}).append(
+						(params.exibirCodigoProduto ? $('<td>', {'text': (item.codigo || ''), 'class': 'text_left', 'style': 'max-width:40px; word-wrap: break-word; ' + fontSize}) : ''),
+						$('<td>', {'text': item.descricao, 'class': 'text_left wh50', 'style': 'word-wrap: break-word; max-width:110px; ' + fontSize}),
+						$('<td>', {'text': nroBraDecimais(item.quantidade, params.qtdDecimal), 'class': 'text_right wh10', 'style': fontSize}),
+						(params.exibirLocalizacao ? $('<td>', {'text': (item.localizacao || ''), 'class': 'text_left wh20', 'style': 'max-width: 80px; word-wrap: break-word; ' + fontSize}) : ''),
+						(params.exibirDescontoItens ? $('<td>', {'text': (nroBraDecimais(item.descontoItem, params.precoDecimal) || ''), 'class': 'text_right wh20', 'style': 'max-width: 80px; word-wrap: break-word; ' + fontSize}) : ''),
+						$('<td>', {'text': nroBraDecimais(item.valor, params.precoDecimal), 'class': 'text_right wh10', 'style': fontSize}),
+						$('<td>', {'text': nroBra(item.quantidade * item.valor), 'class': 'text_right wh10', 'style': fontSize})
+					);
+
+					if (params.exibirComentarioItens && $.trim(item.obs) != '') {
+						htmlItem.append(
+							$('<tr>', {'class': 'border-bottom'}).append(
+								$('<td>', {'colspan': '6'}).append(
+									$('<b>', {'html': 'Obs: ' + item.obs.trim()})
+								)
+							)
+						)
+					}
+
+					return htmlItem;
+				})
+			)
+		);
+
+		var infoParcelas = $('<table>', {'class': 'wh100', 'style': 'table-layout: fixed; margin-top: 8px;'}).append(
+			$('<thead>').append(
+				$('<tr>').append(
+					$('<th>', {'text': 'Data', 'class': 'text_left', 'style': fontSize}),
+					$('<th>', {'text': 'Forma pgto.', 'class': 'text_left', 'style': fontSize}),
+					$('<th>', {'text': 'Cód. fiscal', 'class': 'text_left', 'style': fontSize}),
+					$('<th>', {'text': 'Valor', 'class': 'text_right', 'style': fontSize})
+				)
+			),
+			$('<tbody>').append(
+				$.map(venda.parcelas, function(parcela) {
+					return $('<tr>').append(
+						$('<td>', {'text': dataHoraBr(parcela.dataVencimento, '-', false), 'style': fontSize}),
+						$('<td>', {'text': (parcela.descricao ? parcela.descricao.trim() : ''), 'class': 'wh35', 'style': fontSize}),
+						$('<td>', {'text': (parcela.codigoFiscal || ''), 'class': 'wh30', 'style': fontSize}),
+						$('<td>', {'text': nroBra(parcela.valor), 'class': 'text_right wh20', 'style': fontSize})
+					)
+				})
+			)
+		);
+
+		comprovantes.append(
+			$('<div>', {'style': 'font-size:' + params.tamanhoFonte + 'pt;'}).append(
+				$('<table>', {'class': 'wh100', 'style': 'font-size: 8pt;'}).append(
+					$('<tbody>').append(
+						$('<tr>').append(
+							$('<td>', {'class': 'text_center wh40'}).append($('<img/>', {'src': params.logos[venda.loja], 'class': 'wh90'})),
+							$('<td>', {'class': 'wh60'}).append(
+								document.createTextNode(venda.empresa.nome), $('<br>'),
+								document.createTextNode(venda.empresa.cnpj), $('<br>'),
+								document.createTextNode(venda.empresa.ie), $('<br>'),
+								document.createTextNode('Tel.: ' + venda.empresa.fone), $('<br>'),
+								montarEnderecoImpressaoComprovante(venda.empresa, false), $('<br>'),
+								document.createTextNode(venda.empresa.bairro + ' - Cep ' + venda.empresa.cep), $('<br>'),
+								document.createTextNode(venda.empresa.cidade + ' - ' + venda.empresa.uf), $('<br>')
+							)
+						)
+					)
+				),
+				$('<div>', {'class': 'rcpt-body'}).append(
+					(venda.numeroMesa > 0 ? $('<div>', {'class': 'float_left text_left wh100'}).append($('<b>', {'text': 'Mesa '})).append(document.createTextNode(venda.numeroMesa)) : ''),
+					$('<div>').append(
+						$('<div>', {'class': 'float_left text_left wh100'}).append($('<b>', {'text': 'Pedido: '})).append(document.createTextNode(venda.numeroPedido))
+					),
+					$('<div>').append(
+						$('<div>', {'class': 'float_left text_left wh50'}).append($('<b>', {'text': 'Data: '})).append(document.createTextNode(dataHoraBr(venda.data, '-', false))),
+						$('<div>', {'class': 'float_right text_right wh50'}).append($('<b>', {'text': 'Data prevista: '})).append(document.createTextNode(dataHoraBr(venda.dataPrevista, '-', false)))
+					),
+					$('<div>', {'class': 'wh100'}).append(
+						$('<div>', {'class': 'float_left text_left wh50'}).append($('<b>', {'text': 'Cliente: '})).append(document.createTextNode(venda.nome)),
+						(venda.nomeVendedor ? $('<div>', {'class': 'float_right text_right wh50'}).append($('<b>', {'text': 'Vendedor: '})).append(document.createTextNode(venda.nomeVendedor)) : '')
+					),
+					$('<div>', {'class': 'wh100'}).append(
+						(venda.cnpj ? $('<div>', {'class': 'float_left text_left wh50'}).append($('<b>', {'text': 'CPF/CNPJ: '})).append(document.createTextNode(venda.cnpj)) : ''),
+						(venda.codigoContato ? $('<div>', {'class': 'float_left ' + (venda.cnpj ? 'text_right' : 'text_left') +' wh50'}).append($('<b>', {'text': 'Código do cliente: '})).append(document.createTextNode(venda.codigoContato)) : '')
+					),
+					(venda.fone ? $('<div>', {'class': 'float_left text_left wh100'}).append($('<b>', {'text': 'Telefone: '})).append(document.createTextNode(venda.fone)) : ''),
+					(venda.email ? $('<div>', {'class': 'float_left text_left wh100'}).append($('<b>', {'text': 'E-mail: '})).append(document.createTextNode(venda.email)) : ''),
+					(venda.endereco ? $('<div>', {'class': 'float_left text_left wh100'}).append($('<b>', {'text': 'Endereço: '})).append(montarEnderecoImpressaoComprovante(venda, true)) : ''),
+					$('<div>', {'class': 'float_left text_left wh100'}).append(document.createTextNode((venda.cidade ? venda.cidade + ' ' : '') + (venda.uf ? venda.uf + ' ' : '') + (venda.cep ? venda.cep : '')))
+				),
+				(infoItens.find('tbody tr').length ? infoItens : ''),
+				(params.exibirDescontoItens ? $('<div>', {'class': 'float_right text_right wh100', 'style': 'margin-bottom: 8px;'}).append($('<b>', {'text': 'Desconto dos itens: '})).append(document.createTextNode(nroBraDecimais(descontoItens, params.precoDecimal) + ' ')) : ''),
+				(infoParcelas.find('tbody tr').length ? infoParcelas : ''),
+				$('<div>', {'class': 'margin_top5'}).append(
+					$('<div>', {'class': 'float_right text_right wh100'}).append($('<b>', {'text': 'Sub total: '})).append(document.createTextNode(nroBra(totalItens) + ' ')),
+					(parseFloat(nroUsa(venda.desconto)) > 0 ? $('<div>', {'class': 'float_right text_right wh100'}).append($('<b>', {'text': 'Desconto: -'})).append(document.createTextNode(venda.desconto + ' ')) : ''),
+					(parseFloat(nroUsa(venda.outrasDespesas)) > 0 ? $('<div>', {'class': 'float_right text_right wh100'}).append($('<b>', {'text': 'Outras despesas: '})).append(document.createTextNode(nroBra(venda.outrasDespesas) + ' ')) : ''),
+					(venda.frete > 0 ? $('<div>', {'class': 'float_right text_right wh100'}).append($('<b>', {'text': 'Frete: '})).append(document.createTextNode(nroBra(venda.frete) + ' ')) : ''),
+					$('<div>', {'class': 'float_right text_right wh100'}).append($('<b>', {'text': 'Total: '})).append(document.createTextNode(nroBra(venda.totalVenda)))
+				),
+				(params.exibirObservacoes && venda.observacoes.trim() ? $('<div>', {'class': 'text_left wh100 margin_top5'}).append($('<b>', {'text': 'Obs.: '})).append(document.createTextNode(venda.observacoes)) : ''),
+				$('<div>', {'class': 'text_center wh100 margin_top5'}).append(params.rodape),
+				$('<div>', {'class': 'text_center wh100'}).css({'font-style': 'italic', 'font-size': '0.9em'}).append(document.createTextNode(dataHoraBr(venda.dataCriacao, '-', 'S')))
+			)
+		);
+
+		if (ultVenda != i) {
+			comprovantes.append($('<p>', {'class': 'page-break'}));
+		}
+	});
+
+	comprovantes.printStyle({'stylesheet': params.stylesheet,
+		'globalStyles': false,
+		'onClose': function() {
+			if ($('#modulo').val() == 'PDV') {
+				$('#busca_produto').focus();
+			}
+		}
+	});
+
+	closeWait(params.closeWait);
+}
+
+function montarEnderecoImpressaoComprovante(dados, incluirBairro) {
+	var endereco = [dados.endereco || '', dados.enderecoNro || '', dados.complemento || ''];
+
+	if (incluirBairro) {
+		endereco.push(dados.bairro || '');
+	}
+
+	return document.createTextNode(endereco.join(', '));
+}

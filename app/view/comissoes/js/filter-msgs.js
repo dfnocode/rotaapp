@@ -1,0 +1,802 @@
+function FilterMessage(config) {
+    this.config = {
+        messages: {
+            text: this.messageInputs,
+            checkbox: this.messageCheckbox,
+            select: this.messageSelect,
+            toggle: this.messageToggle,
+            'date-range': this.messageDateRange,
+            'dynamic-filter': this.messageDynamic
+        },
+        datatable: null,
+        dynamic: null,
+        filter: null,
+        area: null,
+        countSelecteds: false,
+        inputs: [],
+        onFilter: function() {
+            return false;
+        },
+        debug: false,
+        resetValues: []
+    };
+    LerConfiguracoes(this.config, config);
+    var area = $('<div>', { id: 'search-tag' });
+    this.config.area.append(area);
+    this.config.area = area;
+    this.messages = null;
+    this.groups = null;
+    this.inputs = this.delay = null;
+    this.timer = 200;
+    var ref = this;
+    setTimeout(function() {
+        ref.initialize();
+    }, 500);
+}
+
+FilterMessage.prototype.initialize = function() {
+    if (this.groups) {
+        return;
+    }
+    this.groups = {};
+    this.inputs = {};
+    var group, prev = null,
+        gPrev;
+    for (i = 0; i < this.config.inputs.length; i++) {
+        var input = $(this.config.inputs[i]);
+        group = this.agroup(input);
+        if (!group) {
+            continue;
+        }
+        if (!this.groups[group.name]) {
+            this.groups[group.name] = group;
+            this.groups[group.name].label = group.label;
+            if (gPrev) {
+                this.groups[group.name].prev = gPrev;
+                this.groups[gPrev].next = group.name;
+            } else {
+                this.groups.start = group.name;
+            }
+            gPrev = group.name;
+        }
+        this.groups[group.name].inputs.push(input);
+        var name = input.attr('name') || group.name;
+        if (!this.inputs[name]) {
+            this.inputs[name] = {
+                group: group.name,
+                prev: prev,
+                name: name
+            };
+            if (prev) {
+                this.inputs[prev].next = name;
+            } else if (prev !== undefined) {
+                this.inputs.first = name;
+            }
+            prev = name;
+        }
+    }
+};
+
+FilterMessage.prototype.agroup = function(input) {
+    var name = input.attr('name');
+    var type = input.attr('type');
+    var group = {
+        tags: {},
+        inputs: [],
+        label: this.label(input),
+        message: null,
+        name: name,
+        multi: false
+    };
+    if (!type) {
+        if (input[0].tagName == 'BUTTON') {
+            return false;
+        }
+        group.type = 'select';
+        this.bindFunction(group, name);
+        this.bindEvents(input, group);
+        return group;
+    }
+    if (type == 'button' || type == 'hidden') {
+        return false;
+    }
+    if ($(input[0].parentNode).hasClass('input-daterange')) {
+        group.type = 'date-range';
+        this.bindFunction(group, name);
+        this.bindEvents(input, group);
+        if (group.name == name) {
+            group.name = group.label;
+        }
+        return group;
+    }
+    if (input.hasClass('dynamic-filter')) {
+        group.type = 'dynamic-filter';
+        group.name = 'dynamic-filter';
+        group.multi = true;
+        this.bindEvents(input, group);
+        this.bindFunction(group, name);
+        return group;
+    }
+    group.type = type;
+    if (type == 'checkbox') {
+        if (input.parents('.toogle-checkbox').length > 0) {
+            group.type = 'toggle';
+        } else {
+            group.multi = true;
+        }
+    }
+    this.bindFunction(group, name);
+    this.bindEvents(input, group);
+    return group;
+};
+
+FilterMessage.prototype.bindEvents = function(input, group) {
+    var ref = this;
+    if (group.type != 'dynamic-filter') {
+        input.on('change', function(e) {
+            clearTimeout(ref.delay);
+            ref.delay = setTimeout(function() {
+                ref.onChange(group.name, $(input).val());
+            }, ref.timer);
+        });
+    }
+    if (group.type == 'select' || group.type == 'checkbox') {
+        return;
+    }
+    input.on('keyup', function(e) {
+        ref.onEnter(group.name, e, $(this));
+    });
+};
+
+FilterMessage.prototype.bindFunction = function(group, name) {
+    var ref = this;
+    for (var fields in this.config.messages) {
+        var aFields = fields.split(',');
+        if (aFields.indexOf(name) == -1) {
+            continue;
+        }
+        var message = this.config.messages[fields];
+        group.name = fields;
+        group.label = message.label || undefined;
+        if (!message.message) {
+            continue;
+        }
+        group.message = function(group, level) {
+            var allDefault = true;
+            for (var i = 0; i < group.inputs.length; i++) {
+                if (!ref.isDefaultValue(group.inputs[i])) {
+                    allDefault = false;
+                    break;
+                }
+            }
+            if (allDefault) {
+                return;
+            }
+            var ret = message.message.call(ref, ref.config.inputs);
+            if (ret === false) {
+                return ref.config.messages[group.type].call(ref, group, level);
+            }
+            return ref.tag(ret, ret, undefined, undefined, undefined, level, undefined, group);
+        };
+        return;
+    }
+    group.message = function(group, value) {
+        return ref.config.messages[group.type].call(ref, group, value);
+    };
+};
+
+FilterMessage.prototype.show = function() {
+    if (!this.groups) {
+        this.initialize();
+    }
+    var ref = this;
+    this.messages = {};
+    var msg = [];
+    input = this.inputs[this.inputs.first];
+    var sec = 0;
+    while (input && sec < 100) {
+        if (!this.messages[input.group]) {
+            if (input.group == 'dynamic-filter' || this.groups[input.group].type == 'checkbox') {
+                for (var tag in this.groups[input.group].tags) {
+                    delete this.groups[tag];
+                }
+            }
+            this.groups[input.group].tags = {};
+            this.build(this.groups[input.group], msg);
+            this.messages[input.group] = true;
+        }
+        if (!input.next) {
+            input = null;
+            continue;
+        }
+        input = this.inputs[input.next];
+        sec++;
+    }
+    var buildClear = (msg.length > 0);
+    this.notFilter = null;
+    if (!buildClear) {
+        this.notFilter = this.tag('Nenhum filtro aplicado', undefined, undefined, false).rendered;
+        msg.push(this.notFilter);
+    }
+    if (buildClear) {
+        msg.push(
+            $('<span>', { class: 'badge badge-transparent', id: 'clear-all' }).append(
+                $('<a>', { class: 'clr', text: 'Limpar' })
+            ).on('click', function(event) {
+                event.preventDefault();
+                ref.clearAll();
+            })
+        );
+    }
+    this.config.area.html(msg);
+    if (this.config.datatable) {
+        this.updateTotalSelecteds(this.config.datatable.selecteds);
+    }
+};
+
+FilterMessage.prototype.build = function(group, msg) {
+    var tags = group.message(group);
+    if (!tags || tags.length == 0) {
+        return;
+    }
+    if (Array.isArray(tags)) {
+        var tag = null;
+        for (var t = 0; t < tags.length; t++) {
+            if (!this.saveTag(tags[t].group, tags[t])) {
+                continue;
+            }
+            var i = 0,
+                first = null;
+            for (tag in tags[t].group.tags) {
+                if (i == 0) {
+                    first = tags[t].group.tags[tag];
+                } else {
+                    tags[t].group.tags[tag][0].rendered.addClass('hidde-title');
+                }
+                i++;
+            }
+            if (i > 1) {
+                first[0].rendered.addClass('overloaded');
+            }
+            tag = tags[t];
+            if (tags[t].rendered) {
+                tag = tags[t].rendered;
+            }
+            msg.push(tag);
+        }
+        return;
+    }
+    if (this.saveTag(tags.group, tags)) {
+        msg.push(tags.rendered);
+    }
+};
+
+FilterMessage.prototype.dynamicGroup = function(dynamic) {
+    var group = this.groups[dynamic.label];
+    if (!group) {
+        this.groups[dynamic.label] = {
+            tags: {},
+            inputs: [],
+            label: dynamic.label,
+            message: null,
+            parent: dynamic.group || 'dynamic-filter',
+            name: dynamic.label,
+            multi: true,
+            type: dynamic.type
+        };
+        group = this.groups[dynamic.label];
+        this.groups[dynamic.group || 'dynamic-filter'].tags[dynamic.label] = this.groups[dynamic.label];
+    }
+    return group;
+};
+
+FilterMessage.prototype.saveTag = function(group, tag, multi, temp) {
+    var ret = true;
+    if (tag.group) {
+        group = tag.group;
+    }
+    for (var gTag in group.tags) {
+        var tags = group.tags[gTag];
+        for (var i = 0; i < tags.length; i++) {
+            if (!group.tags[gTag]) {
+                i = tags.length;
+                continue;
+            }
+            if (!group.multi && tags[i].temp == temp) {
+                tags[i].rendered.remove();
+                delete group.tags[gTag];
+                continue;
+            }
+            if (gTag == tag.value && tags[i].value == tag.id) {
+                return false;
+            }
+            if (temp) {
+                ret = tags[i].rendered;
+            }
+        }
+    }
+    if (!group.tags[tag.value]) {
+        group.tags[tag.value] = [];
+    }
+    group.tags[tag.value].push({ rendered: tag.rendered, value: tag.id, temp: temp });
+    return ret;
+};
+
+FilterMessage.prototype.messageInputs = function(group, level) {
+    if (this.isDefaultValue(group.inputs[0])) {
+        return;
+    }
+    return this.tag(group.inputs[0].val(), group.inputs[0].val(), group.label, undefined, undefined, level, undefined, group);
+};
+
+FilterMessage.prototype.messageCheckbox = function(group, level) {
+    var gName = '',
+        groups = [];
+    var inputs = group.inputs;
+    for (var i = 0; i < inputs.length; i++) {
+        gName = $(inputs[i].parents('.form-group')).find('label')[0].innerText || group.label;
+        if (!inputs[i].is(':checked')) {
+            continue;
+        }
+        var ref = this;
+        groups.push(
+            this.tag(
+                $(inputs[i].parent()).next('label').text(),
+                inputs[i].val(),
+                gName,
+                function() {
+                    var input = [inputs[i]];
+                    return function() {
+                        ref.clear(input);
+                        if (!level || level == 'warning') {
+                            ref.config.onFilter();
+                            ref.show();
+                        } else {
+                            ref.onChange(group);
+                        }
+                    };
+                }(),
+                undefined,
+                level,
+                undefined,
+                this.dynamicGroup({ label: gName, type: group.type, group: group.name })
+            )
+        );
+    }
+    return groups;
+};
+
+FilterMessage.prototype.messageToggle = function(group, level) {
+    if (!group.inputs[0].is(':checked')) {
+        return;
+    }
+    label = $(group.inputs[0].parents('.form-group')).find('label')[0].innerText || group.label;
+    return this.tag(label, group.inputs[0].val(), '', undefined, undefined, level, undefined, group);
+};
+
+FilterMessage.prototype.messageSelect = function(group, level) {
+    if (this.isDefaultValue(group.inputs[0])) {
+        return;
+    }
+    var msg = '';
+    var sep = ', ';
+    $.each(group.inputs[0].find('option:selected'), function() {
+        msg += this.innerText + sep;
+    });
+    if (msg) {
+        msg = msg.substring(0, msg.length - sep.length);
+    }
+    return this.tag(msg, group.inputs[0].val(), group.label, undefined, undefined, level, undefined, group);
+};
+
+FilterMessage.prototype.messageDynamic = function(group, level) {
+    if (!this.config.dynamic) {
+        console.log('Filter-Message: Dynamic filter not is initialized');
+    }
+    var ref = this;
+    var groups = [];
+    var filter;
+    for (var id in this.config.dynamic.filters) {
+        filter = this.config.dynamic.filters[id];
+        group = this.dynamicGroup(filter);
+        for (var value in filter.values) {
+            groups.push(this.tag(value, filter.values[value].values[0], filter.label,
+                function() {
+                    var input = { id: id, value: value };
+                    return function() {
+                        ref.config.dynamic.removeItem(input.id);
+                        if (!level || level == 'warning') {
+                            ref.config.onFilter();
+                            ref.show();
+                        } else {
+                            ref.onChange(group);
+                        }
+                    };
+                }(), undefined, level, undefined, group));
+        }
+    }
+    return groups;
+};
+
+FilterMessage.prototype.messageDateRange = function(group, level) {
+    if (group.inputs.length != 2) {
+        return;
+    }
+    var dataIni = group.inputs[0];
+    var dataFim = group.inputs[1];
+    var msg = this.buildMessageDateRange(dataIni, dataFim);
+    if (!msg) {
+        return;
+    }
+    return this.tag(msg, group.name, group.label, undefined, undefined, level, undefined, group);
+};
+
+FilterMessage.prototype.buildMessageDateRange = function(dataIni, dataFim) {
+    if (this.isDefaultValue(dataIni) || this.isDefaultValue(dataFim)) {
+        return;
+    }
+    if (dataIni.val() == dataFim.val()) {
+        return ' do dia ' + dataIni.val();
+    }
+    var arrDataIni = dataIni.val().split('/');
+    var arrDataFim = dataFim.val().split('/');
+    var min = new Date(arrDataIni[2], arrDataIni[1], arrDataIni[0]);
+    var max = new Date(arrDataFim[2], arrDataFim[1], arrDataFim[0]);
+    if (arrDataIni[1] == arrDataFim[1] && arrDataIni[2] == arrDataFim[2] && arrDataIni[0] == 1 && new Date(arrDataIni[2], arrDataIni[1], 0).getDate() == arrDataFim[0]) {
+        return 'mês de ' + $.fn.datepickerFiltro.dates['pt-BR'].months[(arrDataIni[1]) - 1];
+    }
+    if (min.getTime() > max.getTime()) {
+        var aux = dataIni.val();
+        dataIni.val(dataFim.val());
+        dataFim.val(aux);
+    }
+    return '(' + dataIni.val() + ' até ' + dataFim.val() + ')';
+};
+
+FilterMessage.prototype.isDefaultValue = function(input) {
+    var name = input.attr('name');
+    var value = input.val();
+    if (typeof value == 'string') {
+        value = value.trim();
+    }
+    var def = '';
+    if (this.config.resetValues[name]) {
+        def = this.config.resetValues[name].value || this.config.resetValues[name];
+    }
+    if (def == value || !value || value == '*' || value == 'opc-todos') {
+        return true;
+    }
+    return false;
+};
+
+FilterMessage.prototype.tag = function(msg, id, label, fnClear, pill, level, onClick, group) {
+    if (!msg) {
+        return false;
+    }
+    var clearButton = '';
+    var hasClose = '';
+    var ref = this;
+    if (fnClear !== false) {
+        fnClear = fnClear || function() {
+            ref.clear(group.inputs);
+            if (!level || level == 'light') {
+                ref.config.onFilter();
+                ref.show();
+            } else {
+                ref.onChange(group);
+            }
+        };
+        clearButton = $('<span>', { class: 'clear-tag', html: $('<i>', { class: 'fas fa-times' }) }).on('click', fnClear);
+        hasClose = ' has-close';
+    }
+    if (group != null && group.inputs.length > 0) {
+        onClick = function() {
+            ref.config.filter.open();
+            setTimeout(function() {
+                group.inputs[0].focus();
+            }, 10);
+        };
+    }
+    label = (label ? $('<span>', { class: 'title-badge', text: label + ': ' }).on('click', onClick) : '');
+    var tag = $('<span>', { class: 'badge badge-' + (level || 'light') + (pill ? ' badge-pill' : '') + hasClose })
+        .append(label,
+            $('<span>', { class: 'content-badge' }).append(
+                $('<span>', { html: msg }).on('click', onClick),
+                clearButton
+            )
+        );
+    return {
+        group: group,
+        value: msg,
+        id: id,
+        rendered: tag
+    };
+};
+
+FilterMessage.prototype.position = function(group, tag) {
+    var curr, pos;
+    var currGroup = group;
+    var sec = 0;
+    while (currGroup && sec < 100) {
+        sec++;
+        for (curr in currGroup.tags) {
+            if (!Array.isArray(currGroup.tags[curr])) {
+                for (var subG in this.groups[curr].tags) {
+                    if (currGroup.name == group.name) {
+                        if (this.groups[curr].tags[subG][0].value != tag.id) {
+                            pos = this.groups[curr].tags[subG][0];
+                        }
+                    }
+                }
+                continue;
+            }
+            if (currGroup.name == group.name && currGroup.tags[curr][0].value == tag.id) {
+                continue;
+            }
+            pos = currGroup.tags[curr][0];
+        }
+        if (pos) {
+            if (this.config.debug) {
+                console.log('Depois da próxima tag do item/grupo existente');
+            }
+            tag.rendered.insertAfter(pos.rendered);
+            return;
+        }
+        currGroup = this.groups[currGroup.prev];
+    }
+    if (group) {
+        currGroup = this.groups[group.next];
+    }
+    while (currGroup && sec < 100) {
+        sec++;
+        for (curr in currGroup.tags) {
+            if (!Array.isArray(currGroup.tags[curr])) {
+                for (var subG in this.groups[curr].tags) {
+                    if (this.config.debug) {
+                        console.log('Antes da próxima tag do grupo existente');
+                    }
+                    tag.rendered.insertBefore(this.groups[curr].tags[subG][0].rendered);
+                    return;
+                }
+                continue;
+            }
+            if (currGroup.name == group.name && currGroup.tags[curr][0].value == tag.id) {
+                continue;
+            }
+            if (this.config.debug) {
+                console.log('Antes da próxima tag existente');
+            }
+            tag.rendered.insertBefore(currGroup.tags[curr][0].rendered);
+            return;
+        }
+        currGroup = this.groups[currGroup.next];
+    }
+    var badges = this.config.area.find('.badges');
+    if (badges.length == 1 && this.notFilter) {
+        if (this.config.debug) {
+            console.log('Depois do primeiro badge');
+        }
+        tag.rendered.insertAfter(this.notFilter);
+        return;
+    }
+    tagR = this.config.area.find('#clear-all');
+    if (tagR.length > 0) {
+        if (this.config.debug) {
+            console.log('Antes da tag CLR');
+        }
+        tag.rendered.insertBefore(tagR);
+        return;
+    }
+    if (this.config.debug) {
+        if (this.config.debug) {
+            console.log('No final');
+        }
+    }
+    this.config.area.append(tag.rendered);
+};
+
+FilterMessage.prototype.status = function(group, tags, tag) {
+    if (!tags) {
+        var total = 0;
+        tags = {};
+        for (var curr in group.tags) {
+            var totalSub = 0;
+            if (!Array.isArray(group.tags[curr])) {
+                for (var subG in this.groups[curr].tags) {
+                    totalSub++;
+                    tags[subG] = { tag: this.groups[curr].tags[subG], group: this.groups[curr].name };
+                }
+                this.groups[curr].total = totalSub;
+                continue;
+            }
+            total++;
+            tags[curr] = { tag: group.tags[curr], group: group.name };
+        }
+        group.total = total;
+    }
+    if (tag && tags[tag.value]) {
+        tags[tag.value].tag[0].rendered.removeClass('overrided');
+        delete tags[tag.value];
+    }
+    return tags;
+};
+
+
+FilterMessage.prototype.removeTags = function(tags) {
+    var group = null;
+    for (var label in tags) {
+        group = this.groups[tags[label].group];
+        group.total--;
+        if (tags[label].tag[0].temp) {
+            tags[label].tag[0].rendered.remove();
+            delete this.groups[tags[label].group].tags[label];
+            continue;
+        }
+        tags[label].tag[0].rendered.addClass('overrided');
+    }
+    if (!group || group.total > 1) {
+        return;
+    }
+    for (var tag in group.tags) {
+        if (tag == label) {
+            continue;
+        }
+        if (!Array.isArray(group.tags[tag])) {
+            return;
+        }
+        group.tags[tag][0].rendered.removeClass('overloaded');
+        group.tags[tag][0].rendered.removeClass('hidde-title');
+        break;
+    }
+};
+
+FilterMessage.prototype.onChange = function(group) {
+    var ref = this;
+    if (!$('.clear-all').length) {
+        $('#filter-button-area .btn-secundary-novo').css('margin-bottom', '');
+        $('<span>', { class: 'link clear-all', text: 'Limpar filtros' }).on('click', function(event) {
+            event.preventDefault();
+            ref.clearAll();
+            $(this).remove();
+        }).insertAfter('#filter-button-area button');
+    }
+    this.config.filter.pending = true;
+};
+//todo test a function
+FilterMessage.prototype.onEnter = function(group, e, input) {
+    if (e.keyCode != 13) {
+        return;
+    }
+    group = this.groups[group];
+    if (group.type == 'date-range') {
+        if (typeof old != 'undefined' && old == input.val()) {
+            return;
+        }
+        old = input.val();
+    }
+    if (input.attr('autocomplete')) {
+        if (typeof id == 'undefined') {
+            var id = input.attr('id');
+            id = $('#id' + id[0].toUpperCase() + id.substring(1));
+            if (id.length == 0) {
+                id = $(input.parent('.form-group').find('input[type=hidden]'));
+            }
+        }
+        if (typeof oldId != 'undefined' && id.val() == oldId) {
+            return;
+        }
+        oldId = id.val();
+    }
+    clearTimeout(this.delay);
+    var ref = this;
+    this.delay = setTimeout(function() {
+        ref.config.onFilter();
+    }, this.timer);
+};
+
+FilterMessage.prototype.updateTotalSelecteds = function(selecteds) {
+    if (this.counts) {
+        this.counts.rendered.remove();
+    }
+    var that = this;
+    if (selecteds.length) {
+        this.counts = this.tag(selecteds.length + ' cadastros', 'selecteds', 'Selecionados', function() {
+            selecteds.resetAll();
+            that.config.datatable.updateHeadPos();
+        });
+        this.position(undefined, this.counts);
+    }
+};
+
+FilterMessage.prototype.activeElement = function(input) {
+    this.open();
+    var fnFocus = function() {
+        $(input).focus();
+    };
+    if (!this.isOpen) {
+        setTimeout(fnFocus, 400);
+        return;
+    }
+    fnFocus();
+};
+
+FilterMessage.prototype.clearAll = function(filter) {
+    if (filter === undefined) {
+        filter = true;
+    }
+    this.config.area.html('');
+    if (typeof pagina != 'undefined') {
+        pagina = 1;
+    }
+    if (typeof pesquisa != 'undefined') {
+        pesquisa = '';
+    }
+    for (var group in this.groups) {
+        if (group == 'start') {
+            continue;
+        }
+        if (this.groups[group].name == 'dynamic-filter') {
+            this.config.dynamic.removeAll();
+        }
+        this.clear(this.groups[group].inputs);
+    }
+    this.config.datatable.selecteds.resetAll();
+    $('#pesquisa-mini').val('');
+    if (this.config.resetValues['pesquisa-mini'] && this.config.resetValues['pesquisa-mini'].event) {
+        this.config.resetValues['pesquisa-mini'].event();
+    }
+    $('.clear-input').addClass('invisivel');
+    if (filter) {
+        this.config.onFilter();
+    }
+};
+
+FilterMessage.prototype.clear = function(inputs) {
+    var events = [];
+    for (var i = 0; i < inputs.length; i++) {
+        var def = '';
+        var name = inputs[i].attr('name');
+        if (this.config.resetValues[name]) {
+            if (this.config.resetValues[name]) {
+                def = this.config.resetValues[name].value || this.config.resetValues[name];
+            }
+            if (this.config.resetValues[name].event) {
+                events.push(this.config.resetValues[name].event);
+            }
+        }
+        if (inputs[i].attr('type') == 'checkbox') {
+            inputs[i].prop('checked', false);
+            continue;
+        }
+        var tree = inputs[i].prev('.tree-select');
+        if (tree.length > 0) {
+            $('#' + tree.attr('id')).treeSelect('setSelected', []);
+            $('#' + tree.attr('id')).treeSelect('runCallback', 'onSelect', 0);
+        }
+        inputs[i].val(def);
+        $(inputs[i].parents('.form-group').find('[type=hidden]')).val('');
+        fieldFeedback($(inputs[i]), '');
+    }
+    for (i = 0, eLengths = events.length; i < eLengths; i++) {
+        events[i]();
+    }
+};
+
+FilterMessage.prototype.label = function(input) {
+    if (input.attr('type') == 'checkbox') {
+        label = input.attr('name').replace('[]', '');
+        return label[0].toUpperCase() + label.substring(1);
+    }
+    var label = input.prev('label');
+    if (label.length == 0) {
+        label = $($(input.parent('.form-group')).find('label'));
+        if (label.length == 0) {
+            label = $('label[for=' + input.attr('id') + ']');
+        }
+    }
+    label = label.text().trim();
+    if (label == '' && this.config.debug) {
+        console.log('Filter-Message: label ausente para o input ' + input.attr('id'));
+    }
+    return label;
+};

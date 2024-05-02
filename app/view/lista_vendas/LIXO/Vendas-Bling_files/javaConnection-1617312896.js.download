@@ -1,0 +1,269 @@
+var JavaConnection = function (type, element) {
+    var instance;
+
+    function createInstance(type, element) {
+        if (type === "appJava") {
+            return new ApplicationFunctions();
+        } else {
+            return new AppletFunctions(element);
+        }
+    }
+
+    return {
+        getInstance: function () {
+            if (!instance) {
+                instance = createInstance(type, element);
+            }
+            return instance;
+        }
+    };
+};
+
+var ApplicationFunctions = function () {
+    var url = new getServerUrl();
+
+    this.config = function (parameters, callback) {
+        CallMethod("/config", parameters, function (err, data) {
+            try {
+                data = JSON.parse(data);
+                if (!err && !data.err) {
+                    callback(false, data.info);
+                } else {
+                    callback(true, data.info);
+                }
+            } catch (e) {
+                callback(err, data);
+            }
+        });
+    };
+
+    this.getAtr = function(parameters, callback) {
+        CallMethod("/getAppVersion", "", function (vErr, vData) {
+            if (!vErr && vData >= 1.4) {
+                CallMethod("/getAtr", parameters, function(err, data) {
+                    try {
+                        data = JSON.parse(data);
+                        saveAtr(data);
+                    } catch (e) {
+                        callback(err, data);
+                    }
+                });
+            }
+        });
+    };
+
+    this.getMessages = function (callback) {
+        CallMethod("/getMessages", "", function (err, data) {
+            if (!err && data == "") {
+                callback(false, data);
+            } else {
+                callback(true, data);
+            }
+        });
+    };
+
+    this.getAdditionalInformation = function (callback) {
+        CallMethod("/getAdditionalInformation", "", function (err, data) {
+            callback(err, data);
+        });
+    };
+
+
+    this.choosePathToFile = function (callback) {
+        CallMethod("/choosePathToFile", "", function (err, data) {
+            callback(err, data);
+        });
+    };
+
+    this.signXml = function (xml, callback) {
+        CallMethod("/runService", xml, function (err, data) {
+            try {
+                data = JSON.parse(data);
+                if (!err && !data.err) {
+                    callback(false, data.info);
+                } else {
+                    callback(true, data.info);
+                }
+            } catch (e) {
+                callback(err, data);
+            }
+        });
+    };
+
+    this.getListOfAliases = function (callback) {
+        CallMethod("/getListOfAliases", "", function (err, data) {
+            callback(err, data);
+        });
+    };
+
+    this.checkAutoLibSelection = function (callback) {
+        CallMethod("/getAppVersion", "", function (err, data) {
+            if (!err && data >= 1.2) {
+                callback(false, data);
+            } else {
+                callback(true, "Versão não suporta seleção automática");
+            }
+        });
+    };
+
+    this.sendToPrinter = function (parameters, callback) {
+        CallMethod("/sendToPrinter", parameters, function (err, data) {
+            callback(err, data);
+        });
+    };
+
+    this.writeToFile = function (parameters, callback) {
+        CallMethod("/writeToFile", parameters, function (err, data) {
+            callback(err, data);
+        });
+    };
+
+    function CallMethod(endpoint, parameters, callback) {
+        $.ajax({
+            type: 'GET',
+            url: url.protocol + "://" + url.ip + ":" + url.port + endpoint,
+            data: {parameters: encode64(JSON.stringify(parameters))},
+            dataType: 'text',
+            success: function (data) {
+                callback(false, (data != "" ? fixString(decode64(data)) : ""));
+            },
+            error: function (xhr) {
+                verifyErrorCode(xhr.status, function(info) {
+                    callback(true, info);
+                });
+            }
+        });
+    };
+
+    function getServerUrl() {
+        opt = {protocol: "https", port: "8003", ip: "127.0.0.1"};
+        BrowserDetect.init();
+
+        if ((BrowserDetect.browser === "Chrome" && BrowserDetect.version >= 53) || (BrowserDetect.browser === "Firefox" && BrowserDetect.version >= 55)) {
+            opt.protocol = "http";
+            opt.port = "8004";
+        }
+
+        return opt;
+    }
+
+};
+
+var AppletFunctions = function (element) {
+
+    this.config = function (parameters, callback) {
+        callAppletFunction(element, "config", parameters, function (err, data) {
+            try {
+                data = JSON.parse(data);
+                if (!err && !data.err) {
+                    callback(false, data.info);
+                } else {
+                    callback(true, data.info);
+                }
+            } catch (e) {
+                callback(err, data);
+            }
+        });
+    };
+
+    this.getMessages = function (callback) {
+        callAppletFunction(element, "getMessages", null, function (err, data) {
+            if (!err && data == "") {
+                callback(false, data);
+            } else {
+                callback(true, data);
+            }
+        });
+    };
+
+    this.getAdditionalInformation = function (callback) {
+        callAppletFunction(element, "getAdditionalInformation", null, function (err, data) {
+            callback(err, data);
+        });
+    };
+
+    this.choosePathToFile = function (callback) {
+        callAppletFunction(element, "choosePathToFile", null, function (err, data) {
+            callback(err, data);
+        });
+    };
+
+    this.signXml = function (xml, callback) {
+        callAppletFunction(element, "runService", xml, function (err, data) {
+            try {
+                data = JSON.parse(data);
+                if (!err && !data.err) {
+                    callback(false, data.info);
+                } else {
+                    callback(true, data.info);
+                }
+            } catch (e) {
+                callback(err, data);
+            }
+        });
+    };
+
+    this.getListOfAliases = function (callback) {
+        callAppletFunction(element, "getListOfAliases", null, function (err, data) {
+            callback(err, data);
+        });
+    };
+
+    this.sendToPrinter = function (parameters, callback) {
+        callAppletFunction(element, "sendToPrinter", parameters, function (err, data) {
+            callback(err, data);
+        });
+    };
+
+    this.writeToFile = function (parameters, callback) {
+        callAppletFunction(element, "gerarArquivo", parameters, function (err, data) {
+            callback(err, data);
+        });
+    };
+
+    this.checkAutoLibSelection = function (callback) {
+        callback(false, "");
+    }
+
+    function callAppletFunction(element, method, parameters, callback) {
+        var err = false;
+        var data = "";
+        try {
+            if (!parameters) {
+                data = window["document"][element][method]();
+            } else {
+                data = window["document"][element][method](encode64(JSON.stringify(parameters)));
+            }
+        } catch (e) {
+            data = 'Para continuar, habilite a opção <strong>Utilizar recurso de acesso via aplicação</strong> e faça o download da aplicação <strong>Bling NFe</strong>.' + ((window.location.host).indexOf('bling') > -1 ? ' Para maiores informações de como realizar esta configuração, acesse o manual <a target="_blank" href="https://manuais.bling.com.br/manual/?item=passos-iniciais-para-emissao-da-nfe">clicando aqui</a>.' : '');
+            err = true;
+        }
+        callback(err, data);
+    }
+};
+
+function verifyErrorCode(xhr, callback) {
+	var info = '';
+	switch (xhr) {
+		case 0:
+			info = 'Não foi possível conectar o aplicativo emissor de NFe\'s ' + ((window.location.host).indexOf('bling') > -1 ? '<a href=\'https://ajuda.bling.com.br/hc/pt-br/articles/360036447273-Erro-ao-enviar-a-nota-N%C3%A3o-foi-poss%C3%ADvel-conectar-o-aplicativo-emissor-de-NF-es\' target=\'_blank\'>Veja como corrigir</a>' : '');
+			break;
+		case 5:
+			info = 'A Aplicação BlingNfe está desatualizada';
+			break;
+		default:
+			break;
+	}
+
+	callback(info);
+}
+
+function fixString(data) {
+    try {
+        fixedstring = decodeURIComponent(escape(data));
+    } catch (e) {
+        fixedstring = data;
+    }
+
+    return fixedstring;
+}

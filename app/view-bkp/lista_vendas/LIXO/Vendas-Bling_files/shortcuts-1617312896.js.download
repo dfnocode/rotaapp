@@ -1,0 +1,70 @@
+$(function() {
+	$.hotkeys.textAcceptingInputTypes = [];
+	$.hotkeys.options.filterInputAcceptingElements = false;
+});
+
+var Shortcuts = function(ulAttrs) {
+	this.fnKey = (BrowserDetect.osName == 'MacOS' ? 'ctrl+shift+' : 'alt+');
+	this.ulAttributes = (ulAttrs || {'class': 'lista-atalhos'});
+	this.commandList = null;
+	this.commandCharList = [];
+};
+Shortcuts.prototype = {
+	create: function(data) {
+		this.commandList = $('<ul>', this.ulAttributes);
+		var _this = this;
+
+		$.each(data || [], function(eventType) {
+			$.each(this, function(keys) {
+				_this.add(eventType, keys, this);
+			})
+		});
+	},
+
+	add: function(type, keys, params) {
+		this._registerEvent(type, keys, params.handler);
+		this._renderItemList(keys, params.description);
+	},
+
+	getCommandList: function() {
+		return this.commandList;
+	},
+
+	getCommandCharList: function() {
+		return this.commandCharList;
+	},
+
+	getFnKeyByOS: function(key) {
+		this.commandCharList.push(key.toUpperCase());
+		return this.fnKey + key;
+	},
+
+	renderShortcuts: function(shortcuts) {
+		if (shortcuts.keydown) {
+			$.each(shortcuts.keydown, function(key, value) {
+				if (this.elementSelector) {
+					$(this.elementSelector).attr('data-shortcut', key);
+				}
+			});
+		}
+	},
+
+	_registerEvent: function(type, keys, handler) {
+		keys = keys.toLowerCase();
+
+		var typeCommand = type + '.' + keys.replace('+', '.');
+		$(document).unbind(typeCommand).bind(typeCommand, keys, handler);
+	},
+
+	_renderItemList: function(keys, description) {
+		keys = keys.toUpperCase();
+
+		$(this.commandList).children('[data-keys="' + keys + '"]').remove();
+		this.commandList.append(
+			$('<li>', {'data-keys': keys}).append(
+				$('<span>', {text: description}),
+				$('<span>', {text: keys})
+			)
+		);
+	}
+};

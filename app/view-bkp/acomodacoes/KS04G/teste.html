@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
+<!--[if gt IE 8]>      <html class="no-js"> <!--<![endif]-->
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title></title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <script>
+        function goBack() {
+            window.history.back()
+        }
+
+        function myFunction() {
+            var txt;
+            var r = confirm("APERTE OK PARA VOLTAR");
+            if (r == true) {
+                txt = "You pressed OK!";
+            } else {
+                txt = "You pressed Cancel!";
+                goBack();
+            }
+            document.getElementById("demo").innerHTML = txt;
+        }
+
+        function limpaCache() {
+
+
+            $.ajax({
+                url: "",
+                context: document.body,
+                success: function(s, x) {
+
+                    $('html[manifest=saveappoffline.appcache]').attr('content', '');
+                    $(this).html(s);
+                    alert("Deu Certo!");
+
+                }
+            });
+
+        }
+
+        function refresh() {
+            setTimeout(function() {
+                location.reload();
+                alert("LIMPOU");
+            }, 100);
+        }
+
+        function cacheClean() {
+            location.reload();
+
+
+        }
+
+
+        $(document).ready(function() {
+
+            // jQuery methods go here...
+            //alert("ISSO É SÓ UMA DEMONSTRAÇÃO");
+
+            //refresh();
+
+            //cacheClean(1);
+            //myFunction();
+
+
+
+        });
+    </script>
+    <script>
+    </script>
+
+</head>
+
+<body>
+    <!--[if lt IE 7]>
+            <p class="browsehappy">You are using an <strong>outdated</strong> browser. Please <a href="#">upgrade your browser</a> to improve your experience.</p>
+        <![endif]-->
+
+    <div class="btn-group dropup">
+        <button type="button" class="btn btn-secondary" id="cache-button" onclick="cacheClean()">LIMPAR CACHE</button>
+        <button type="button" class="btn btn-secondary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+        <span class="sr-only">Toggle Dropdown</span>
+      </button>
+        <div class="dropdown-menu">
+            <a class="dropdown-item" href="#">Action</a>
+            <a class="dropdown-item disabled" href="#">Disabled action</a>
+            <h6 class="dropdown-header">Section header</h6>
+            <a class="dropdown-item" href="#">Action</a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="#">After divider action</a>
+        </div>
+    </div>
+
+    <script src="" async defer></script>
+</body>
+
+</html>

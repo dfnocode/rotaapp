@@ -1,0 +1,287 @@
+function MenuContext(conf) {
+	this.config = {
+		debug : false,
+		data : null,
+		datatable: null
+	};
+	LerConfiguracoes(this.config, conf);
+	if (this.config.debug) {
+		Script.load('templates/components/data-table/data-table-debug.js');
+	}
+	if (!this.config.data || this.config.data.menus.length == 0) {
+		return false;
+	}
+	this.allArePermission = true;
+	for (var i = 0 ; i < this.config.data.menus.length; i++) {
+		var gMenu = this.config.data.menus[i];
+		for (var menu in gMenu) {
+			if (gMenu[menu].permissions && gMenu[menu].permissions.length > 0) {
+				continue;
+			}
+			gMenu[menu].permissions = [];
+			gMenu[menu].permissions = this.getGroupPermitions(menu, gMenu[menu].permissions);
+			if (gMenu[menu].permissions.length > 0) {
+				continue;
+			}
+			this.allArePermission = false;
+		}
+	}
+}
+
+//todo a function can be a only call
+MenuContext.prototype.build = function(values) {
+	var dropMenu = document.createElement('ul');
+	dropMenu.setAttribute('class', 'dropdown-menu dropdown-menu-right');
+	if (this.allArePermission) {
+		var menus = this.buildItens(values, dropMenu);
+		if (menus.childNodes.length == 0) {
+			return '';
+		}
+		dropMenu.appendChild(menus);
+	}
+	var classe = this;
+	var btnGroupDiv = document.createElement('div');
+	btnGroupDiv.setAttribute('class', 'btn-group');
+	var icon = document.createElement('i');
+	icon.setAttribute('class', 'fas fa-ellipsis-v');
+	var button = document.createElement('button');
+	button.setAttribute('type', 'button');
+	button.setAttribute('data-toggle', 'dropdown');
+	button.setAttribute('aria-haspopup', 'true');
+	button.setAttribute('aria-expanded', 'false');
+	button.setAttribute('class', 'btn-invisible dropdown-toggle');
+	button.appendChild(icon);
+	btnGroupDiv.appendChild(button);
+	btnGroupDiv.appendChild(dropMenu);
+	$(btnGroupDiv).on('shown.bs.dropdown', function() {
+		classe.getPosition(dropMenu, values);
+	});
+	return btnGroupDiv;
+};
+
+MenuContext.prototype.getPosition = function(dropMenu, values) {
+	var scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+	dropMenu.props = {
+		width: parseInt(getComputedStyle(dropMenu, null).width.replace("px", "")),
+		outerHeight: parseInt(getComputedStyle(dropMenu, null).height.replace("px", "")),
+		styleTop: parseInt(getComputedStyle(dropMenu, null).top.replace("px", "")),
+		offsetTop: parseInt(dropMenu.getBoundingClientRect().top + scrollTop),
+	}
+	var lis = dropMenu.getElementsByTagName('li');
+	if (lis == undefined || lis.length == 0) {
+		dropMenu.appendChild(this.buildItens(values, dropMenu));
+	}
+	if (!dropMenu.addedMarginWidth) {
+		dropMenu.style.width = (dropMenu.props.width + 20) + 'px' ;
+		dropMenu.addedMarginWidth = true;
+	}
+	var pos = {
+		drop: {
+			height: dropMenu.offsetHeight,
+			top: dropMenu.props.offsetTop - dropMenu.props.styleTop - window.scrollY
+		},
+		page: {
+			height: window.innerHeight
+		}
+	};
+	var top = 3;
+	var isBottomOut = function (pos, top) {
+		return ((top + pos.drop.top + pos.drop.height) > pos.page.height);
+	};
+	if (isBottomOut(pos, top)) {
+		top = pos.drop.height / 2;
+		if (isBottomOut(pos, top)) {
+			top = top + (pos.drop.height - (pos.page.height - (pos.drop.top - top))) + ((this.config.datatable.hasPagination) ? 5 : 0);
+		}
+	}
+	if ( dropMenu.props.offsetTop - dropMenu.props.styleTop - top - 150 < 0) {
+		top = top + (dropMenu.props.offsetTop - dropMenu.props.styleTop - top ) - 150;
+	}
+	//validar se o fim e ficou longe do item que disparou o evento
+	top = top * -1;
+	dropMenu.style.top = top + 'px';
+	dropMenu.style.right = '15px';
+};
+
+MenuContext.prototype.buildItens = function(values, dropMenu) {
+	if (!this.config.data || this.config.data.menus.length == 0) {
+		return [];
+	}
+	var itens = document.createDocumentFragment();
+	for (var i = 0 ; i < this.config.data.menus.length; i++) {
+		var gMenu = this.config.data.menus[i];
+		var fnAdicionaSeparador = function() {
+			var li = document.createElement('li');
+			li.className = 'divider';
+			li.setAttribute('role', 'separator');
+			itens.appendChild(li);
+			fnAdicionaSeparador = function() {
+				return false;
+			};
+			return true;
+		};
+		for (var menu in gMenu) {
+			if (gMenu[menu].permissions == undefined) {
+				gMenu[menu].permissions = [];
+			} else if (!Array.isArray(gMenu[menu].permissions)) {
+				gMenu[menu].permissions = [gMenu[menu].permissions];
+			}
+			gMenu[menu].permissions = this.getGroupPermitions(menu, gMenu[menu].permissions);
+			if (!this.itemPermited(gMenu[menu].permissions, values)) {
+				continue;
+			}
+			if (i > 0) {
+				fnAdicionaSeparador();
+			}
+			var icon = '';
+			if (gMenu[menu].icon) {
+				icon = gMenu[menu].icon;
+				if (typeof icon == 'function') {
+					icon = icon(values);
+				}
+				var iconElement = document.createElement('span');;
+				if (icon.substr(icon.length - 4) == '.svg') {
+					var imgIcon = document.createElement('img');
+						imgIcon.src = icon;
+					iconElement.appendChild(imgIcon);
+					iconElement.className = 'bli';
+				} else {
+					iconElement.className = icon;
+				}
+			}
+			var menuItem = document.createElement('li');
+			var linkMenuItem = document.createElement('a');
+			var props = gMenu[menu].props;
+			if (typeof gMenu[menu].props == 'function') {
+				var props = gMenu[menu].props(values);
+			}
+			if (props) {
+				for (var prop in props) {
+					linkMenuItem.setAttribute(prop, props[prop]);
+				}
+			}
+			linkMenuItem.appendChild(iconElement);
+			var spanMenuItem = document.createElement('span');
+			spanMenuItem.textContent = menu;
+			linkMenuItem.appendChild(spanMenuItem);
+			menuItem.appendChild(linkMenuItem);
+			menuItem.onclick = function() {
+				var action = gMenu[menu].action;
+				if (!action) {
+					action = gMenu[menu];
+				}
+				return function () {
+					action.call(dropMenu, values);
+				};
+			}();
+			if (gMenu[menu].class) {
+				menuItem.className += ' '+gMenu[menu].class;
+			} else if (iconElement.classList.contains("fa-trash-alt")) {
+				menuItem.className += ' background-red-on-hover';
+			}
+			itens.appendChild(menuItem);
+		}
+	}
+	var classe = this;
+	if (this.config.debug) {
+		var aLink = document.createElement('a');
+		aLink.appendChild(document.createTextNode('Comparar menus antigos'));
+		var liComparar = document.createElement('li');
+		liComparar.appendChild(aLink);
+		aLink.addEventListener('click', function(e) {
+			menusAntigos = itens;
+			return function () {
+				classe.dialogCompare(menusAntigos);
+			};
+		}());
+		itens.appendChild(liComparar);
+	}
+	return itens;
+};
+
+MenuContext.prototype.getGroupPermitions = function(label, permissions) {
+	if (!this.config.data.permissions) {
+		return permissions;
+	}
+	for (var g = 0; g < this.config.data.permissions.length; g++ ) {
+		var idcMenu = null;
+		for (var m = 0 ; m < this.config.data.permissions[g].menus.length; m++) {
+			if (this.config.data.permissions[g].menus[m] == label) {
+				idcMenu = m;
+				break;
+			}
+		}
+		if (idcMenu === null) {
+			continue;
+		}
+		if (!Array.isArray(this.config.data.permissions[g].permissions)) {
+			permissions.push(this.config.data.permissions[g].permissions);
+		} else {
+			permissions = permissions.concat(this.config.data.permissions[g].permissions);
+		}
+		this.config.data.permissions[g].menus.splice(idcMenu, 1);
+		if (this.config.data.permissions[g].menus.length > 0) {
+			continue;
+		}
+		this.config.data.permissions.splice(g, 1);
+		g--;
+	}
+	return permissions;
+};
+
+MenuContext.prototype.itemPermited = function(permissions, values) {
+	for (var p = 0; p < permissions.length; p++) {
+		var permission = permissions[p];
+		if (typeof permission == 'string') {
+			permission = this.stringToPermission(permission);
+		}
+		try {
+			if (!permission(values,this.config.datatable.config.feed.permissions)) {
+				return false;
+			}
+		} catch(ex) {
+			console.log('Context-Menu: error to process menu permission: ', permission, ex);
+		}
+	}
+	return true;
+};
+
+MenuContext.prototype.stringToPermission = function(permission) {
+	var negative = false;
+	if (permission[0] == '!') {
+		permission = permission.substr(1);
+		negative = true;
+	}
+	var props = permission.split('.');
+	if (props[0] != 'data') {
+		props.unshift('permissions');
+	}
+	var classe = this;
+	var fnValidate = function(values, permissions) {
+		values = {data: values, permissions: permissions };
+		for (var i = 0 ; i < props.length; i++) {
+			if (values[props[i]] == undefined) {
+				if (classe.config.debug)  {
+					console.log('Menu Contexto: permissão não encontrada', props);
+				}
+				return false;
+			}
+			if (i == props.length -1) {
+				var res = (negative) ? !values[props[i]] : values[props[i]];
+				if (props[0] == 'permissions') {
+					fnValidate = function() {
+						return res;
+					};
+				}
+				return res;
+			}
+			values = values[props[i]];
+		}
+		return false;
+	};
+	return fnValidate;
+};
+// if (!encontrou && this.config.debug) {
+//     console.log('Data-Table: menu não encontrado (' + gPermissions[g].menus[i] + ')');
+// }
+// this.config.contextMenu.permissions = null;

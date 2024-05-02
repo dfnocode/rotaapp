@@ -1,0 +1,45 @@
+if (typeof Interceptor == 'undefined') {
+    var Interceptor = window[Interceptor] = function() {};
+    Interceptor.extras = [];
+    Interceptor.intercept = function(fn, fnName, conf) {
+        var config = {
+            execAfter : false,
+            debug : false
+        };
+        LerConfiguracoes(config, conf);
+        if (!fnName || window[fnName] == undefined && config.debug) {
+            console.log('Interceptor: A função '+ fnName + ' não existe');
+            return;
+        }
+        if (Interceptor.extras[fnName] != undefined){
+            Interceptor.extras[fnName].push(fn);
+            return window[fnName];
+        }
+        Interceptor.extras[fnName] = [];
+        Interceptor.extras[fnName].push(fn);
+        return (function() {
+            var cached_function = window[fnName];
+            return function() {
+                var result = null;
+                if (config.execAfter) {
+                    result = cached_function.apply(this, arguments);
+                }
+                if (result != null && typeof result == 'object' && typeof result.done == 'function') {
+                    result.done(function() {
+                        for (var idcXrtas = 0; idcXrtas < Interceptor.extras[fnName].length; idcXrtas++) {
+                            Interceptor.extras[fnName][idcXrtas].apply(this, arguments);
+                        }
+                    });
+                    return result;
+                }
+                for (var idcXrtas = 0; idcXrtas < Interceptor.extras[fnName].length; idcXrtas++) {
+                    Interceptor.extras[fnName][idcXrtas].apply(this, arguments);
+                }
+                if (!config.execAfter) {
+                    result = cached_function.apply(this, arguments);
+                }
+                return result;
+            };
+        })();
+    };
+}

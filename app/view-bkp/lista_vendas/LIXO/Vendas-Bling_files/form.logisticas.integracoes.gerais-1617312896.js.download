@@ -1,0 +1,1297 @@
+var integracoesLogisticas = [];
+var servicosLogistica = [];
+var servicosLogisticaEx = [];
+var volumesLogistica = [];
+var volumesCotacaoProduto = [];
+var atualizarCamposTransportadora = true;
+var cotacoes = [];
+var embalagensDisponiveis = [];
+var produtosCotacao = [];
+var preencherFreteComCotacao = 'N';
+var preencherFreteComCotacao_valorAdicional = '0,00';
+var preencherFreteComCotacao_valorAdicional_tipo = '';
+
+$(function() {
+	$(document).on('change', '#integracaoLogistica', function() {
+		xajax_obterServicosLogistica($(this).val(), obterRequisitosCotacao());
+		clearVolumes();
+		toggleVerDisponibilidade();
+		toggleLogisticaPersonalizada();
+		checkDisableLogistic();
+		verificaTipoCotacaoDisponivel();
+		$('#tipoCotacaoFrete').val('V');
+	})
+	.on('change', '#cep, #etiqueta_cep, #etiqueta_mostrar, #loja', function() {
+		validarDisponibilidadeServicos();
+	})
+	.on('click', '#dispo_servico_log', function(e) {
+		e.preventDefault();
+		validarDisponibilidadeServicos();
+	})
+	.on('change', 'select[name="servicosLogistica[]"], input[name="trackings[]"]', function() {
+		var iVolume = $(this).attr('data-volume-i');
+		var idServico = $('select[name="servicosLogistica[]"][data-volume-i="' + iVolume + '"]').val();
+		var tracking = $('input[name="trackings[]"][data-volume-i="' + iVolume + '"]').val();
+
+		if (preencherFreteComCotacao == 'S') {
+			atualizarFrete();
+		}
+		atualizarDadosVolume(iVolume, idServico, tracking);
+	})
+	.on('change', 'select[name="servicosLogistica[]"]', function() {
+		atualizarCodigoCorreios('S');
+	})
+	.on('click', '#add_novo_volume', function(e) {
+		e.preventDefault();
+
+		var novoVolume = {
+			'id': 0,
+			'idServico': '-1',
+			'tracking': ''
+		};
+
+		addNovoVolume(novoVolume, volumesLogistica.length, true);
+	})
+	.on('click', 'a[name="excluir_volume"]', function() {
+		excluirVolume($(this).attr('data-volume-i'));
+	})
+	.on('click', 'a[name="consultarCotacao"]', function() {
+		var tipoCotacao = $('#tipoCotacaoFrete').val();
+		abrirPopupCotacao($(this).attr('data-volume-i'), tipoCotacao);
+	})
+	.on('change', '#objectType', function() {
+		var tipoIntegracao = $('#integracaoLogistica option:selected').attr('data-tipointegracao');
+		LogisticFactory.create(tipoIntegracao).updateObjectType($(this).val());
+	})
+	.on('change', '#embalagem', function() {
+		atualizarDimensoesVolume($(this).val(), true);
+	})
+	.on('change', '#buscaPorNome', function() {
+		atualizarDimensoesVolume(0);
+		ajustaToggleEmbalagemNome('#buscaPorNome');
+	})
+	$('#tipoCotacaoFrete').on('change', function() {
+		if ($(this).val() == 'P') {
+			$('#btnCotacaoProduto').addClass('div-btnGroup-checked');
+			$('#btnCotacaoVolume').removeClass('div-btnGroup-checked');
+		} else {
+			$('#btnCotacaoProduto').removeClass('div-btnGroup-checked');
+			$('#btnCotacaoVolume').addClass('div-btnGroup-checked');
+		}
+	});
+	$('.div-btnGroup button').on('click', function() {
+		var buttonClicked = $(this);
+		if (buttonClicked.hasClass('div-btnGroup-checked')) {
+			if (buttonClicked.val() == 'P') {
+				abrirPopupCotacao('0', 'P', true);
+				bloqueiaObjetosPostagem();
+			}
+			return;
+		}
+		var contItemServico = 0;
+		$.each(volumesLogistica, function(key, value) {
+			if (value.idServico > 0) {
+				contItemServico = 1;
+				return;
+			}
+		});
+		if (contItemServico) {
+			DialogMessage.question({
+				'htmlTitle': 'Aviso',
+				'description': 'Trocar o tipo de cotação irá excluir os objetos de postagem, deseja continuar?',
+				'fnOk': function () {
+					validaTrocaCotacao(buttonClicked);
+				}
+			});
+		} else {
+			validaTrocaCotacao(buttonClicked);
+		}
+	});
+});
+
+function validaTrocaCotacao(element) {
+	var selectTipoCotacaoFrete = $('#tipoCotacaoFrete');
+	$('.div-btnGroup-checked').removeClass('div-btnGroup-checked');
+	clearVolumes();
+	element.addClass('div-btnGroup-checked');
+	selectTipoCotacaoFrete.val(element.val());
+	if (element.val() == 'P') {
+		abrirPopupCotacao('0', 'P', true);
+		bloqueiaObjetosPostagem();
+	}
+}
+
+
+function bloqueiaObjetosPostagem() {
+	$('#lista_volumes .btn-delete-box, #add_novo_volume').hide();
+	$("[name='servicosLogistica[]'], [name='volume_indice']").css('background-color', '#E5E5E5').attr('readonly', 'readonly');
+}
+
+function verificaTipoCotacaoDisponivel() {
+	id = $('#integracaoLogistica').val();
+	key = integracoesLogisticas.map(function(e) { return e.id; }).indexOf(id);
+	if (key == -1 || integracoesLogisticas[key].tipoCotacaoFrete == 'V') {
+		$('#btnCotacaoVolume').addClass('div-btnGroup-checked');
+		$('#btnCotacaoProduto').removeClass('div-btnGroup-checked');
+		$('#divSeletorTipoCotacao').hide();
+	} else {
+		$('#divSeletorTipoCotacao').show();
+	}
+}
+
+function ajustaToggleEmbalagemNome(campo) {
+	$('#embalagemPeloNome').val('');
+	$('#idProduto').val('');
+	$('#embalagem').val(0);
+	if ($(campo).is(':checked')) {
+		$('#divEmbalagem').addClass('invisivel');
+		$('#divEmbalagemPeloNome').removeClass('invisivel');
+	} else {
+		$('#divEmbalagemPeloNome').addClass('invisivel');
+		$('#divEmbalagem').removeClass('invisivel');
+	}
+}
+function obterRequisitosCotacao() {
+	cepDestino = $('#etiqueta_cep').val();
+	if (!$('#etiqueta_mostrar').is(':checked')) {
+		cepDestino = $('#cep').val();
+		if (contato != undefined && contato.data != undefined) {
+			if (contato.data() == null) {
+				cepDestino = '';
+			} else {
+				cepDestino = contato.data().cep;
+			}
+		}
+	}
+	var requisitosCotacao = {
+		'idLojaVirtual': $('#loja').val(),
+		'idConfUnidadeNegocio': $('#idConfUnidadeNegocio').val(),
+		'contato_destinatario': {
+			'cep': cepDestino
+		},
+		'pesoBruto': $('#pesoBruto').val(),
+		'tipoObjeto': '002',
+		'integracaoLogistica': $('#integracaoLogistica option:selected').attr('data-tipointegracao'),
+		'totalProdutos': $('#divSubtotal').val(),
+		'itensPedido': obterItensCubagem(true)
+	};
+
+	return requisitosCotacao;
+}
+
+function toggleVerDisponibilidade() {
+	if ($('#integracaoLogistica').children('option:selected').attr('data-tipointegracao') === 'Correios') {
+		$('#dispo_servico_log').show();
+	} else {
+		$('#dispo_servico_log').hide();
+	}
+}
+
+function toggleLogisticaPersonalizada() {
+	if ($('#integracaoLogistica').children('option:selected').attr('data-tipointegracao') == 'CustomLogistic') {
+		$('#trackingCode').prop('disabled', false).parent().show();
+	} else {
+		$('#trackingCode').prop('disabled', true).parent().hide();
+	}
+}
+
+function validarDisponibilidadeServicos() {
+	if ($('#integracaoLogistica option:selected').attr('data-tipointegracao') === 'Correios') {
+		var cepDestinatario = $('#etiqueta_cep').val();
+		if (!$('#etiqueta_mostrar').is(':checked')) {
+			cepDestinatario = $('#cep').val();
+			if (contato !== undefined && contato.data !== undefined) {
+				if (contato.data() == null) {
+					cepDestinatario = '';
+				} else {
+					cepDestinatario = contato.data().cep;
+				}
+			}
+		}
+		xajax_validarDisponibilidadeServicoTela(volumesLogistica, {'loja': $('#loja').val() || 0, 'idConfUnidadeNegocio': $('#idConfUnidadeNegocio').val() || 0}, cepDestinatario);
+	}
+}
+
+function mostrarDisponibilidade(disponibilidade) {
+	$.each(disponibilidade.volumes, function() {
+		var info = '';
+
+		if (!disponibilidade.erro) {
+			info = (this.disponivel ?
+				$('<i>', {'class': 'icon-ok', 'title': 'Serviço disponível'}) :
+				$('<i>', {'class': 'icon-remove', 'title': 'Serviço indisponível de ' + disponibilidade.cepRemetente + ' para ' + disponibilidade.cepDestinatario}));
+		} else {
+			info = $('<i>', {'class': 'icon-warning-sign', 'title': 'Não foi possível consultar disponibilidade do serviço, integração logística não respondendo.'});
+		}
+
+		$('[data-info-servico="' + this.idServico + '"]').empty().append(info);
+	});
+}
+
+function mostrarLogisticas(logisticas) {
+	var selectIntegracoesLogistica = limparSelectISLogistica($('#integracaoLogistica'));
+	integracoesLogisticas = [];
+
+	if (logisticas.length > 0) {
+		integracoesLogisticas = logisticas;
+		$.each(logisticas, function() {
+			if (this.status == 'H') {
+				selectIntegracoesLogistica.append('<option value="' + this.id + '" data-statusintegracao="' + this.status + '" data-tipointegracao="' + this.tipoIntegracao + '">' + this.descricao + '</option>');
+			}
+		});
+	}
+}
+
+function mostrarVolumes(volumes, copia) {
+	$('#lista_volumes .table-body').empty();
+	servicosLogisticaEx = [];
+
+	$.each(volumes, function(i, volume) {
+		if (i == (volumes.length - 1)) {
+			var integracaoLogisticaSelecionada = arrayJsonSearch(integracoesLogisticas, 'id', volume.idIntegracao);
+			if (!jQuery.isEmptyObject(integracaoLogisticaSelecionada)) {
+				if (integracaoLogisticaSelecionada.status == 'D' || integracaoLogisticaSelecionada.status == 'E') {
+					var situacao = (integracaoLogisticaSelecionada.status == 'D' ? 'desabilitada' : 'excluída');
+					$('#integracaoLogistica').append('<option value="' + integracaoLogisticaSelecionada.id + '" data-statusintegracao="' + integracaoLogisticaSelecionada.status + '" data-tipointegracao="' + integracaoLogisticaSelecionada.tipoIntegracao + '" disabled>' + integracaoLogisticaSelecionada.descricao + ' (' + situacao + ')</option>');
+				}
+			}
+
+			$('#integracaoLogistica').val(volume.idIntegracao);
+			verificaTipoCotacaoDisponivel();
+		}
+
+		if (!volume.ativo && volume.idEtiqueta != -1 && jQuery.isEmptyObject(arrayJsonSearch(servicosLogisticaEx, 'id', volume.idEtiqueta))) {
+			servicosLogisticaEx.push({
+				'id': volume.idEtiqueta,
+				'descricao': volume.nomeServico,
+			});
+		}
+
+		var tracking = '';
+		if (volume.codigoEtiqueta.length > 0) {
+			tracking = volume.prefixoServico + volume.codigoEtiqueta + volume.nacionalidade;
+		}
+
+		var volumeParsed = {
+			'integracaoLogistica': volume.tipoIntegracao,
+			'id': (copia == 'S' ? 0 : volume.id),
+			'idServico': volume.idEtiqueta,
+			'tracking': tracking,
+			'pesoBruto': volume.pesoBruto,
+			'largura': volume.largura,
+			'altura': volume.altura,
+			'comprimento': volume.comprimento,
+			'ar': parseInt(volume.ar),
+			'mp': parseInt(volume.mp),
+			'tipoObjeto': volume.tipoObjeto,
+			'valorDeclarado': nroBra(volume.valorDeclarado),
+			'idProduto': volume.idProduto,
+			'idPlp': volume.idPlp,
+			'fretePrevisto': nroBra(volume.fretePrevisto),
+			'tipoCotacaoFrete' :volume.tipoCotacaoFrete
+		};
+
+		addNovoVolume(volumeParsed, i, false);
+	});
+
+	if (volumesLogistica.length > 0) {
+		$('#box_volumes').show();
+	}
+
+	permissaoEdicaoTracking();
+	toggleVerDisponibilidade();
+	checkDisableLogistic();
+}
+
+function alteraBotaoCotacaoProduto(volumes) {
+	var countCotacoesProduto = 0;
+	$.each(volumes, function (key, value) {
+		if (value.tipoCotacaoFrete == 'P') {
+			countCotacoesProduto += 1;
+		}
+	}) ;
+	if (countCotacoesProduto >= 1) {
+		$('#tipoCotacaoFrete').val('P') ;
+		$('#btnCotacaoProduto').addClass('div-btnGroup-checked');
+		$('#btnCotacaoVolume').removeClass('div-btnGroup-checked');
+		bloqueiaObjetosPostagem();
+	} else {
+		$('#tipoCotacaoFrete').val('V') ;
+		$('#btnCotacaoProduto').removeClass('div-btnGroup-checked');
+		$('#btnCotacaoVolume').addClass('div-btnGroup-checked');
+	}
+}
+
+function addNovoVolume(volume, i, atualizarQtdVol) {
+	volumesLogistica.push(volume);
+	var integracaoLogistica = ($('#integracaoLogistica').children('option:selected').attr('data-tipointegracao') || volume.integracaoLogistica || 'CorreiosFaixa');
+	var hasQuotationMethod = (LogisticFactory.create(integracaoLogistica).hasQuotationMethod() && integracaoLogistica != 'CorreiosFaixa');
+	var fieldServico = $('<select>', {'name': 'servicosLogistica[]', 'data-volume-i': i, 'class': 'no-border input_text tipsyOff'}).append(obterOpcoesServicos());
+	var quotationField = '';
+
+	if (hasQuotationMethod) {
+		quotationField = $('<div>', {'class': 'table-cell', 'style': 'width: 31px;'}).append(
+			$('<a>', { 'name': 'consultarCotacao', 'data-volume-i': i, 'type': 'button', 'class': 'editgridh'}).append(
+				$('<span>', {'class': 'fas fa-truck', 'title': 'Consultar cotações'})
+			)
+		);
+	}
+
+	$('#lista_volumes .table-body').append(
+		$('<div>', {'data-volume-row': i, 'class': 'table-row'}).append(
+			$('<div>', {'name': 'volume_indice', 'text': i + 1, 'class': 'table-cell text_center', 'style': 'width:2%;'}),
+			$('<div>', {'class': 'table-cell', 'style': 'width:35%;'}).append(
+				fieldServico
+			),
+			$('<div>', {'class': 'table-cell'}).append(
+				$('<input>', {'name': 'trackings[]', 'data-volume-i': i, 'class': 'no-border input_text', 'type': 'text', 'maxlength': '30', 'value': volume.tracking, 'placeholder': 'N/A'}),
+				$('<div>', {'name': 'volume_info', 'data-info-servico': volume.idServico})
+			),
+			quotationField,
+			$('<div>', {'class': 'table-cell btn-delete-box', 'style': 'width:1%;'}).append(
+				$('<a>', {'name': 'excluir_volume', 'data-volume-i': i, 'type': 'button', 'class': 'editgridh'}).append($('<span>', {'class': 'fas fa-trash-alt', 'title': 'Remover objeto'}))
+			)
+		)
+	);
+
+	permissaoEdicaoTracking();
+	fieldServico.val(volume.idServico);
+
+	if (atualizarQtdVol) {
+		atualizarQtdVolumes();
+	}
+}
+
+function permissaoEdicaoTracking() {
+	var allowCustomTracking = LogisticFactory.create($('#integracaoLogistica').children('option:selected').attr('data-tipointegracao')).allowCustomTracking();
+	$('input[name*="trackings"]').prop('readonly', !allowCustomTracking);
+}
+
+function obterOpcoesServicos() {
+	var options = [$('<option>', {'value': '-1', 'text': 'Selecione o serviço'})];
+
+	$.each(servicosLogistica, function(i, servicoLogistica) {
+		options.push($('<option>', {'value': servicoLogistica.servico.id, 'text': servicoLogistica.servico.descricao, 'data-alias': servicoLogistica.servico.alias}));
+	});
+
+	$.each(servicosLogisticaEx, function(i, servicoLogisticaEx) {
+		options.push($('<option>', {'value': servicoLogisticaEx.id, 'text': servicoLogisticaEx.descricao + ' (excluído)', 'disabled': true}));
+	});
+
+	return options;
+}
+
+function mostrarServicosLogisticas(servicos, selectOne) {
+	servicosLogistica = servicos;
+
+	$('select[name="servicosLogistica[]"]').each(function() {
+		$(this).empty().append(obterOpcoesServicos());
+		if (selectOne && servicos.length == 1) {
+			$(this).val(servicos[0]['servico'].id).change();
+		} else {
+			$(this).val('-1');
+		}
+	});
+}
+
+function mostrarRastro(trackingCodeElement, codigoEtiqueta, trackingCode, possuiServico) {
+	trackingCodeElement.parent().show();
+
+	if (codigoEtiqueta.indexOf('S/F') != -1) {
+		trackingCodeElement.val('Sem tracking');
+	} else {
+		var nacionalidadeServico = (possuiServico ? trackingCode.servico.nacionalidade : 'BR');
+		trackingCodeElement.val(trackingCode.tracking.prefixoServico + codigoEtiqueta + nacionalidadeServico);
+	}
+}
+
+function selecionarServico(servico) {
+	if (servico.msgErro) {
+		$('[data-info-servico="-1"]').append(
+			$('<i>', {'class': 'icon-info-sign', 'style': 'color: #e3a541', 'title': 'Regras de frete: ' + servico.msgErro.toLowerCase()})
+		);
+	} else {
+		$('#lista_volumes select[name="servicosLogistica[]"]').val(servico.id).change();
+
+		$('[data-info-servico="' + servico.id + '"]').append(
+			$('<i>', {'class': 'icon-ok', 'title': 'Regras de frete: serviço selecionado a partir das regras de frete'})
+		);
+
+		Toast.create({ 'type': Toast.S, 'msg': 'Serviço selecionado a partir das regras de frete' });
+	}
+}
+
+function atualizarCodigoCorreios(atualizarTransportadora) {
+	$('select[name="servicosLogistica[]"]').each(function() {
+		var logistica = JSON.search(servicosLogistica, '//*[servico[contains(id, "' + $(this).val() + '")]]');
+		var logisticaEncontrada = logistica.length;
+		var idServico = -1;
+
+		if (atualizarTransportadora == 'S' && atualizarCamposTransportadora) {
+			limparDadosTransportador();
+			if (logisticaEncontrada) {
+				atualizarDadosTransportadora(logistica[0].transportadora);
+			}
+		}
+
+		var qtdTrackingFaixa;
+		if (logisticaEncontrada) {
+			qtdTrackingFaixa = logistica[0].servico.quantidade;
+			idServico = logistica[0].servico.id;
+		}
+
+		mostrarAvisoFaixas(qtdTrackingFaixa, idServico);
+	});
+}
+
+function mostrarAvisoFaixas(qtdTrackingFaixa, idServico) {
+	var msg = '';
+	var color = '';
+
+	if (qtdTrackingFaixa == 0) {
+		msg = 'Atenção: Você utilizou todos os códigos cadastrados para este serviço.';
+		color = 'var(--red-color)';
+	} else if (qtdTrackingFaixa > 0 && qtdTrackingFaixa <= 50) {
+		msg = 'Atenção: Restam ' + qtdTrackingFaixa + ' códigos para este serviço.';
+		color = 'var(--yellow-color)';
+	}
+
+	$('[data-info-servico="' + idServico + '"]').empty();
+	if (msg.length) {
+		$('[data-info-servico="' + idServico + '"]').append(
+			$('<span>', {'class': 'fas fa-info-circle', 'style': 'color: ' + color, 'title': msg})
+		);
+	}
+}
+
+function limparSelectISLogistica(select) {
+	select.find('option[value!="-1"]').remove();
+	return select;
+}
+
+function atualizarDadosTransportadora(transportadora) {
+	if (typeof transportadora != 'undefined') {
+		$('#idTransportador').val(transportadora.idTransportadora);
+		$('#transportador').val(transportadora.descricao);
+
+		for (var k in transportadora) {
+			setFieldValue($('#' + k + 'Transportador'), transportadora[k]);
+		}
+	}
+}
+
+function limparDadosTransportador() {
+	$('#idTransportador').val(0);
+	$('#transportador, #cnpjTransportador, #ieTransportador, #enderecoTransportador, #municipioTransportador, #ufTransportador').val('');
+}
+
+function clearVolumes() {
+	var situacao = $('#situacao').val();
+	volumesLogistica = [];
+
+	var volumeVazio = {
+		'id': 0,
+		'idEtiqueta': '-1',
+		'prefixoServico': '',
+		'codigoEtiqueta': '',
+		'nacionalidade': '',
+		'idIntegracao': $('#integracaoLogistica').val()
+	};
+
+	mostrarVolumes([volumeVazio]);
+	atualizarQtdVolumes();
+	if (situacao == '6' || situacao == '7') {
+		return;
+	}
+	limparDadosTransportador();
+}
+
+function vincularLogisticaTracking() {
+	var logisticaObj = this.config.feed.logisticaTracking[this.data.id];
+	if (!logisticaObj) {
+		return false;
+	}
+	var tracking = logisticaObj.logisticaTracking;
+	if (logisticaObj.logisticaTipoIntegracao == 'Intelipost' && tracking == 'N/A') {
+		tracking = this.data.numero || 'N/A';
+	}
+	this.data.etiquetaCorreios = tracking;
+	this.data.idObjetoPlp = logisticaObj.logisticaIdObj;
+	this.data.tipoIntegracaoLogistica = logisticaObj.logisticaTipoIntegracao;
+	this.data.urlRastreamento = logisticaObj.url;
+	var linhaItem = this.linhas[this.data.id];
+		linhaItem.setAttribute('etiquetacorreios', tracking);
+		linhaItem.setAttribute('data-objetoplp', logisticaObj.logisticaIdObj);
+		linhaItem.setAttribute('data-tipo-integracao-logistica', logisticaObj.logisticaTipoIntegracao);
+		linhaItem.setAttribute('data-url-rastreamento', logisticaObj.url);
+	if (logisticaObj.mostraRastro) {
+		var ref = this;
+		var nomeIcone = linhaItem.getAttribute('data-tipo-integracao-logistica');
+			nomeIcone = nomeIcone.toLowerCase();
+		var img = document.createElement('img');
+			img.src = 'images/integracoes-logisticas/cor/' + nomeIcone + '.svg';
+			img.title ='Rastro do objeto';
+			img.addEventListener('click', function() {
+					var data = ref.data;
+					return function() {
+						abrirPopupRastroObjeto(data.id, data.idContato, data.numeroPedido, data.idMagento);
+					};
+			}());
+		return img;
+	}
+}
+
+function clearFormLogistica() {
+	$('#trackingCode').prop('disabled', true).val('');
+	servicosLogistica = volumesLogistica = integracoesLogisticas = [];
+	atualizarCamposTransportadora = true;
+	$('#box_volumes').hide();
+}
+
+function atualizarDadosVolume(iVolume, idServico, tracking) {
+	if (volumesLogistica[iVolume] && volumesLogistica[iVolume].id && volumesLogistica[iVolume].idServico == idServico) {
+		volumesLogistica[iVolume].idServico = idServico;
+		volumesLogistica[iVolume].tracking = tracking;
+	} else {
+		volumesLogistica[iVolume] = {
+			'id': 0,
+			'idServico': idServico,
+			'tracking': tracking
+		};
+	}
+
+	$('[data-volume-row="' + iVolume + '"]').find('[name="volume_info"]').attr('data-info-servico', idServico);
+	atualizarQtdVolumes();
+}
+
+function atualizarFrete() {
+	if (volumesLogistica[0]) {
+		var valorAdicional = parseFloat(preencherFreteComCotacao_valorAdicional);
+		var soma = 0;
+		volumesLogistica.forEach(function(elem) {
+			soma += nroUsaFloat(elem.fretePrevisto);
+		});
+		if (soma > 0) {
+			if (preencherFreteComCotacao_valorAdicional_tipo == '%') {
+				soma += soma * (valorAdicional / 100);
+			} else {
+				soma += valorAdicional;
+			}
+			$('#frete').val(nroBra(soma));
+		}
+	} else {
+		$('#frete').val(nroBra(0));
+	}
+
+	if (typeof(vendas) != 'undefined' && typeof(vendas.venda) != 'undefined') {
+		vendas.venda.updateTotals();
+	} else {
+		totalGeral();
+	}
+}
+
+function excluirVolume(iVolume) {
+	volumesLogistica.splice(iVolume, 1);
+
+	$('div[data-volume-row="' + iVolume + '"]').remove();
+	$('div[data-volume-row]').each(function(i) {
+		$('[data-volume-i="' + $(this).attr('data-volume-row') + '"]').attr('data-volume-i', i);
+		$(this).find('[name="volume_indice"]').text(i + 1);
+		$(this).attr('data-volume-row', i);
+	});
+
+	atualizarQtdVolumes();
+	if (preencherFreteComCotacao == 'S') {
+		atualizarFrete();
+	}
+}
+
+function atualizarQtdVolumes() {
+	var situacao = $('#situacao').val();
+	if ($('#volume_calculado').val() == 'S' ||  situacao == '6' || situacao == '7') {
+		return;
+	}
+
+	var totalVolumes = 0;
+	$.each(volumesLogistica, function() {
+		if (this.idServico > 0) {
+			totalVolumes++;
+		}
+	});
+
+	$('#qtdVolumes').val(totalVolumes);
+}
+
+function erroGeracaoTracking(msg) {
+	DialogMessage.warning({
+		description: 'Alguns trackings não foram gerados:',
+		content:
+		$('<div>', {'style': 'margin-top:5px;'}).append(
+			$('<p>').append(
+				$('<b>'). append(
+					'Motivo: '
+				),
+				msg
+			)
+		)
+	});
+}
+
+function checkDisableLogistic() {
+	var statusLogistica = $('#integracaoLogistica').children('option:selected').attr('data-statusintegracao');
+	var tipoIntegracao = $('#integracaoLogistica').children('option:selected').attr('data-tipointegracao');
+	var disableAddButton = LogisticFactory.create(tipoIntegracao).disableAddVolumeButton();
+	if (statusLogistica == 'D' || statusLogistica == 'E' || disableAddButton) {
+		$('#add_novo_volume').hide();
+		$('#lista_volumes').children().children().find(':input').attr('disabled', true);
+	} else {
+		$('#add_novo_volume').show();
+		$('#lista_volumes').children().children().find(':input').attr('disabled', false);
+	}
+}
+
+function abrirPopupCotacao(iVolume, tipoCotacao, novaCotacao) {
+	if (tipoCotacao == 'V') {
+		var template = 'templates/form.logisticas.cotacao.frete.php';
+		var tipo = 'volume';
+	} else {
+		var template = 'templates/form.logisticas.cotacao.frete.produto.php';
+		var tipo = 'produto';
+		var itensPedido = obterItensCubagem();
+		var itensVazios = itensPedido.length == 0 || typeof itensPedido[0]['id'] == 'undefined' && itensPedido.length  == 1;
+		if ((volumesLogistica[0]['id'] == 0 || novaCotacao) && itensVazios) {
+			return Toast.create({'type': Toast.W, 'msg': 'Para obter a cotação, insira pelo menos um produto no pedido de venda/nota fiscal'});
+		}
+	}
+	$.get(template, function(data) {
+		var dialog = {
+			content: data,
+			config: {
+				title: 'Consulta de cotação por ' + tipo,
+				width: getMobileWidthForDialogs(850)
+			},
+			textOk: 'Salvar',
+			fnOk: function() {
+				salvarCotacao();
+			},
+			fnCreate: function() {
+				displayWait('sincronizarRastroWait');
+				updateQuotationFields(iVolume, tipoCotacao, novaCotacao);
+			},
+			fnBeforeClose: function() {
+				$('.tipsy').hide();
+			},
+			slideIn: true
+		};
+		createDialog(dialog);
+	});
+}
+
+function updateQuotationFields(iVolume, tipoCotacao, novaCotacao) {
+	vincularEventosPopupCotacoes(iVolume);
+
+	var params = {
+		'loja': ($('#loja').val() || 0),
+		'idConfUnidadeNegocio': ($('#idConfUnidadeNegocio').val() || 0)
+	};
+
+	xajax_obterRequisitosCotacoes(params, function(requisitos) {
+		var enderecoRemetente = requisitos.enderecoRemetente;
+		var parametros = requisitos.parametros;
+
+		$('#iVolume').val(iVolume || 0);
+		$('#idObjeto').val(volumesLogistica[iVolume].id);
+		$('#cnpjRemetente').val(enderecoRemetente.cnpj);
+
+		var enderecoDestinatario = '';
+		var cepDestinatario = '';
+		var cidadeDestinatario = '';
+
+		if (parametros.cubagemAutomatica == 'N') {
+			var campo = '#buscaPorNome';
+			$(campo).prop('checked', true);
+			ajustaToggleEmbalagemNome(campo);
+		}
+		if ($('#etiqueta_mostrar').is(':checked')) {
+			enderecoDestinatario =  $('#etiqueta_endereco').val();
+			cepDestinatario =  $('#etiqueta_cep').val();
+			cidadeDestinatario = $('#etiqueta_municipio').val();
+		} else if (contato != undefined && contato.data != undefined && contato.data() != null) {
+			enderecoDestinatario = contato.data().endereco;
+			cepDestinatario = contato.data().cep;
+			cidadeDestinatario = contato.data().cidade;
+		} else {
+			enderecoDestinatario = $('#endereco').val();
+			cepDestinatario = $('#cep').val();
+			cidadeDestinatario = $('#municipio').val();
+		}
+
+		$('#enderecoContato').val(enderecoDestinatario);
+		$('#cepDestino').val(formataCep(cepDestinatario));
+		$('#cidadeContato').val(cidadeDestinatario);
+
+		var fretePorConta = $('#fretePorConta').val();
+		fretePorConta = (fretePorConta == 'D' || fretePorConta == '4' ? 'D' : 'R');
+		$('#freightOn').val(fretePorConta);
+		$('#cepOrigem').val(formataCep(enderecoRemetente.cep));
+
+		var totalProdutos = nroUsaFloat($('#divSubtotal').length > 0 ? $('#divSubtotal').val() : $('#valorProdutos').val());
+		$('#totalProdutos').val(totalProdutos);
+		var volume = volumesLogistica[iVolume];
+		$('#alturaCotacao').val(volume.altura || 0);
+		$('#larguraCotacao').val(volume.largura || 0);
+		$('#comprimentoCotacao').val(volume.comprimento || 0);
+		$('#diametroCotacao').val(volume.diametro || 0);
+
+		var peso = nroUsaFloat($('#pesoBruto').val());
+		if (volume.pesoBruto) {
+			peso = volume.pesoBruto;
+		}
+		$('#pesoCotacao').val(peso);
+
+		if (volume.tipoObjeto) {
+			$('#objectType').val(volume.tipoObjeto).change();
+		}
+
+		if (volume.idProduto > 0) {
+			$('#idEmbalagem').val(volume.idProduto);
+			obterEmbalagemVolume(volume.idProduto);
+		} else {
+			var dimensoesVazias = ((typeof volume.altura == 'undefined') && (typeof volume.largura == 'undefined') && (typeof volume.comprimento == 'undefined'));
+			var autoSelecionar = (parametros.cubagemAutomatica == 'S' && volume.id == 0 && dimensoesVazias);
+			obterEmbalagensCubagem(autoSelecionar);
+		}
+
+		if (volume.id > 0) {
+			$('#valorDeclarado').val(nroUsaFloat(volume.valorDeclarado));
+			$('#ar').prop('checked', volume.ar).change();
+			$('#mp').prop('checked', volume.mp).change();
+
+			if (volume.idPlp > 0) {
+				$($($('#formRequisitosCotacao').parent().closest('.ui-dialog')).find('.ui-button')).eq(1).hide();
+				$('#formRequisitosCotacao select').attr('disabled', true);
+				$('#formRequisitosCotacao input').attr('readonly', true);
+				$('#obterCotacao').hide();
+			}
+		} else {
+			var valorDeclarado = 0;
+			var valorDeclaradoConsiderar = 0;
+			var valorDeclaradoSalvo = nroUsaFloat(volume.valorDeclarado);
+
+			if (valorDeclaradoSalvo) {
+				valorDeclaradoConsiderar = valorDeclaradoSalvo;
+			} else if (parametros.valorConsiderar == 'P') {
+				valorDeclaradoConsiderar = totalProdutos;
+			} else if (parametros.valorConsiderar == 'F') {
+				valorDeclaradoConsiderar = nroUsaFloat($('#divTotal').length > 0 ? $('#divTotal').val() : $('#totalFaturado').val());
+			}
+
+			if ((valorDeclaradoSalvo) || (parametros.valorDeclarado == 'S' && valorDeclaradoConsiderar >= nroUsaFloat(parametros.valorDeclaradoMin))) {
+				valorDeclarado = valorDeclaradoConsiderar;
+				$('#valorDeclarado').val(valorDeclarado);
+			}
+
+			if (typeof volume.ar !== 'undefined') {
+				$('#ar').prop('checked', volume.ar).change();
+			} else if (parametros.ar == 'S' && valorDeclarado > 0 && valorDeclarado >= nroUsaFloat(parametros.arMin)) {
+				$('#ar').prop('checked', true).change();
+			}
+
+			if (typeof volume.mp !== 'undefined') {
+				$('#mp').prop('checked', volume.mp).change();
+			} else if (parametros.mp == 'S' && valorDeclarado > 0 && valorDeclarado >= nroUsaFloat(parametros.mpMin)) {
+				$('#mp').prop('checked', true).change();
+			}
+		}
+		if (tipoCotacao == 'P') {
+			if (novaCotacao) {
+				$('#propriedades_volume').hide();
+				populaProdutosCotacao();
+			} else {
+				$('#propriedades_volume').show().css('display', 'grid');
+				$('#lista_produtos, #btnObterCotacoes').hide();
+				$('#totalProdutos').val(nroUsaFloat(volume.valorDeclarado));
+			}
+		}
+		closeWait('sincronizarRastroWait');
+	});
+}
+
+function montarTabelaProdutosCotacao(produtos) {
+	$.each(produtos, function(key, value) {
+		var destacar = '';
+		var info = '';
+		if (!value.pesoBruto || !value.altura || !value.comprimento || !value.largura) {
+			destacar = 'outline: thin solid; outline-color: orange';
+			info = $('<a>', {'class': 'tableIcon', 'name': '[popoverAvisoCotacao]', 'data-container': '#popupCotacao', 'data-placement': 'left', 'data-trigger': 'hover', 'data-toggle': 'popover', 'data-content': 'Este produto não possui nenhum peso/medida cadastrada'}).append(
+				$('<i>', {'class': 'icon-warning-sign'})
+			);
+			$('#btnObterCotacoes').hide();
+			$('#erroItensCotacaoProduto').show();
+		} else if (!value.codigo) {
+			destacar = 'outline: thin solid; outline-color: orange';
+			info = $('<a>', {'class': 'tableIcon', 'name': '[popoverAvisoCotacao]', 'data-container': '#popupCotacao', 'data-placement': 'left', 'data-trigger': 'hover', 'data-toggle': 'popover', 'data-content': 'Este produto não possui SKU cadastrado. Alguns recursos da cotação por produto podem ficar indisponíveis.'}).append(
+				$('<i>', {'class': 'icon-warning-sign'})
+			);
+		}
+		$('#lista_produtos_body').append(
+			$('<tr>', {style: destacar}).append(
+				$('<td>', {style :'width:25%; padding-left:5px;', text: value.codigo}),
+				$('<td>', {style:'width:55%;', text: value.nome ? value.nome : value.descricao}),
+				$('<td>', {style: 'text-align:right; width:20%;', text:(value.altura || 0) + 'x' + (value.largura || 0) + 'x' + (value.comprimento || 0)}),
+				$('<td>', {style: 'padding-left:10px;'}).append(info)
+			)
+		);
+		initPopovers({'elements': $('a[name*=popoverAvisoCotacao]')});
+	});
+}
+
+function populaProdutosCotacao() {
+	if (typeof arrayItens !== 'undefined') {
+		produtosCotacao = [];
+		var produtosParsed = $.extend(true,{},arrayItens);
+		$.each(produtosParsed, function(key, value) {
+			if (value && value.idProduto != null) {
+				value.valor = value.valorUnitario.replace('.', '').replace(',','.');
+				value.pesoBruto = value.pesoBruto ? value.pesoBruto.replace(',','.') : 0;
+				produtosCotacao.push(value);
+			}
+		});
+		montarTabelaProdutosCotacao(produtosCotacao);
+	} else {
+		var itensPedido = obterItensCubagem();
+		xajax_buscarDadosProdutosLogistica(itensPedido, function(data) {
+			produtosCotacao = data;
+			montarTabelaProdutosCotacao(data);
+		});
+	}
+}
+
+function vincularEventosPopupCotacoes(iVolume) {
+	$('#ar, #mp').change(function() {
+		$('#' + this.id).val($(this).is(':checked') ? 1 : 0);
+	});
+
+	$('.icon-info-sign').tipsy({ gravity: 'w' });
+	$('#popupCotacao').on('scroll', function () {
+		$('.tipsy').hide();
+	});
+
+	var tipoIntegracao = $('#integracaoLogistica option:selected').attr('data-tipointegracao');
+	var logisticDriver = LogisticFactory.create(tipoIntegracao);
+	logisticDriver.initQuotationForm(getLogisticServiceById(volumesLogistica[iVolume].idServico, 'id'));
+	logisticDriver.updateObjectType('002');
+	$('#embalagemPeloNome').autocomplete({
+		source : 'services/embalagens.lookup.php',
+		select: function(event, ui) {
+			$('#idProduto').val(ui.item.id);
+			atualizarDimensoesVolume($("#idProduto").val(), true, ui.item);
+		},
+		change: function(event, ui) {
+			testCompleter($(this), $('#idProduto'), 'Embalagem não encontrada no sistema');
+		},
+		delay :250,
+		minLength:2,
+		selectOnly :true
+	});
+}
+
+function consultarCotacoes() {
+	displayWait('sincronizarRastroWait', true);
+
+	var tipoIntegracao = $('#integracaoLogistica option:selected').attr('data-tipointegracao');
+	var dadosIntegracao = {
+		'idIntegracao': $('#integracaoLogistica option:selected').val(),
+		'tipoIntegracao': tipoIntegracao,
+		'servicos': servicosLogistica.map(function(i) {
+			return i.servico;
+		})
+	};
+
+
+	xajax_consultarCotacoes(dadosIntegracao, xajax.getFormValues('formRequisitosCotacao', true), produtosCotacao, function(quotes) {
+		listarCotacoes(quotes, tipoIntegracao);
+	});
+}
+
+
+function getLogisticServiceById(needed, keyType, logisticServices) {
+	logisticServices = (logisticServices || servicosLogistica);
+	keyType = (keyType || 'idServico');
+
+	var logisticService = {};
+	$.each(logisticServices, function() {
+		if (this.servico[keyType] == needed) {
+			logisticService = this.servico;
+			return false;
+		}
+	});
+
+	return logisticService;
+}
+
+function listarCotacoes(quotes, tipoIntegracao) {
+	cotacoes = [];
+	closeWait('sincronizarRastroWait');
+	if ($('#tipoCotacao').val() == 'P') {
+		$('.cotacaoProduto').hide();
+		$('#obterCotacao').removeClass('call-to-action').text('Atualizar Cotação');
+		$('.divBtnCotacaoProduto').css('text-align', 'right');
+	}
+	if (quotes.error) {
+		displayQuotationError(quotes.msg);
+		return;
+	} else {
+		$('#erro_consulta_cotacao, #resultado_cotacao').html('');
+		$('#tabelaCotacoes').show();
+		var cheapest = getMostCheapQuote(quotes.quotes);
+		var quoteSelected = 0;
+		var volumeSelected =  $('select[data-volume-i="' + $('#iVolume').val() + '"]').val();
+		var volumeInQuotation = isVolumeInQuotation(volumeSelected, quotes.quotes);
+		if (quotes.volumes) {
+			volumesCotacaoProduto = [];
+			var qtVolumes = quotes.volumes.objetos.length;
+			$.each (quotes.volumes.objetos, function(key, value) {
+				volumesCotacaoProduto.push(value);
+			});
+			volumesCotacaoProduto.pesoTotal = quotes.volumes.pesoTotal;
+		} else {
+			var qtVolumes = 0;
+		}
+
+		$.each(quotes.quotes, function(key) {
+			var disabled = (this.errorCode != 0);
+			var keyType = (['Correios', 'Mandae'].indexOf(tipoIntegracao) !== -1 ? 'codigo' : 'idServico');
+			var servico = getLogisticServiceById(this.serviceCode, keyType);
+
+			var info = '';
+			if (volumeInQuotation) {
+				var checked = (servico.id == volumeSelected);
+			} else if (volumeSelected == -1){
+				if (this.price <= cheapest && !this.errorMsg) {
+					cheapest = this.price;
+					quoteSelected = key;
+				}
+			}
+			if (!disabled) {
+				cotacoes.push({'indice': key, 'cotacao': this, 'servico': servico});
+			}
+
+			if (this.errorMsg) {
+				info = $('<a>', {'class': 'tableIcon', 'name': '[popoverAvisoCotacao]', 'data-container': '#popupCotacao', 'data-placement': 'left', 'data-trigger': 'click', 'data-html': true, 'data-toggle': 'popover', 'data-content': this.errorMsg}).append(
+					$('<i>', {'class': 'icon-info-sign'})
+				);
+			}
+			$('#resultado_cotacao').append(
+				$('<tr>').append(
+					$('<td>').append(
+						$('<div>', { 'class': 'input-radio' }).append(
+							$('<input>', { 'type': 'radio', 'name': 'quotes', 'id': 'quoteOption' + key, 'value': key, 'disabled': disabled, 'checked': checked}),
+							$('<label>', { 'for': 'quoteOption' + key }),
+							$('<label>', { 'class': 'label-item-form-input', 'for': 'quoteOption' + key, 'text': ' ' })
+						)
+					),
+					$('<td>', {'text': (servico.descricao || this.serviceCode)}),
+					qtVolumes ? $('<td>', {'text': qtVolumes}) : $('<td>').hide(),
+					$('<td>', {'text': (this.businessTime ? this.businessTime + ' dias' : '-')}),
+					$('<td>', {'text': (this.price > 0 ? float2moeda(this.price) : '-')}),
+					$('<td>', {'id': 'infoCotacao' + key}).append( info )
+				)
+			);
+		});
+
+		if ($('#tabelaCotacoes tr').length <= 1) {
+			displayQuotationError('Nenhum resultado foi retornado.');
+		} else {
+			if (cheapest) {
+				if (!volumeInQuotation && volumeSelected == -1) {
+					$('#quoteOption' + quoteSelected).prop('checked', true);
+				}
+			}
+		}
+	}
+
+	initPopovers({'elements': $('a[name*=popoverAvisoCotacao]')});
+	$('#resultadoCotacoesTitulo').show();
+}
+
+function displayQuotationError(msg) {
+	$('#tabelaCotacoes').hide();
+	$('#erro_consulta_cotacao').show();
+
+	$('#erro_consulta_cotacao').html(
+		$('<div>', {'id': 'aviso', 'class': 'col-xs-12 alert-box alert-box-warning'}).append(
+			$('<p>', {'html': msg})
+		)
+	);
+}
+function adicionaVolumesCotacaoProduto(quote, volumesCotacao) {
+	var msg = 'Cotação gravada e serviço selecionado com sucesso!';
+	$.each(volumesLogistica, function() {
+		excluirVolume(0);
+	});
+	if (quote.serviceCode) {
+		$('#tipoCotacaoFrete').val('P').change();
+		var idServico = quote.idServico;
+		var price = quote.price;
+		var businessTime = quote.businessTime;
+		var pesoTotal = volumesCotacao.pesoTotal;
+		var volumesCotacao = volumesCotacao.objetos;
+	} else {
+		var idServico = quote.servico.id;
+		var price = quote.cotacao.price;
+		var businessTime = quote.cotacao.businessTime;
+		var pesoTotal = volumesCotacao.pesoTotal;
+	}
+	$.each(volumesCotacao, function(key, value) {
+		var volume = {
+			'id': 0,
+			'idProduto': 0,
+			'idServico': idServico,
+			'pesoBruto': value.weight,
+			'largura': value.width,
+			'altura': value.height,
+			'comprimento': value.length,
+			'valorDeclarado': nroBra(value.cost_of_goods),
+			'fretePrevisto': nroBra((price * value.weight)  / pesoTotal),
+			'tipoCotacaoFrete' :'P',
+			'prazoEntregaPrevisto' : businessTime
+		};
+		addNovoVolume(volume, key, true);
+	});
+	if (preencherFreteComCotacao == 'S') {
+		atualizarFrete();
+	}
+	bloqueiaObjetosPostagem();
+	Toast.create({ 'type': Toast.S, 'msg': msg });
+	atualizarCodigoCorreios('S');
+}
+function salvarCotacao() {
+	var quoteSelected = $('input[name=quotes]:checked').val();
+	var iVolume = $('#iVolume').val();
+	var volume = volumesLogistica[iVolume];
+	if (volumesCotacaoProduto.length > 0) {
+		if (quoteSelected) {
+			var quote = arrayJsonSearch(cotacoes, 'indice', quoteSelected);
+			adicionaVolumesCotacaoProduto(quote, volumesCotacaoProduto);
+		}
+		volumesCotacaoProduto = [];
+		return;
+	}
+	if (volume) {
+		if (quoteSelected || volume.idServico != -1) {
+			var msg = 'Dados do volume atualizados com sucesso!';
+
+			if (quoteSelected) {
+				msg = 'Cotação gravada e serviço selecionado com sucesso!';
+				var quote = arrayJsonSearch(cotacoes, 'indice', quoteSelected);
+				var idServico = quote.servico.id;
+				volume.fretePrevisto = nroBra(quote.cotacao.price);
+				volume.prazoEntregaPrevisto = quote.cotacao.businessTime;
+				volume.idServico = idServico;
+
+				if (idServico != $('select[data-volume-i="' + iVolume + '"]').val()) {
+					volume.tracking = '';
+					volume.id = 0;
+				}
+
+				$('select[data-volume-i="' + iVolume + '"]').val(idServico).change();
+ 			}
+
+			volume.pesoBruto = $('#pesoCotacao').val();
+			volume.largura = $('#larguraCotacao').val();
+			volume.altura = $('#alturaCotacao').val();
+			volume.comprimento = $('#comprimentoCotacao').val();
+			volume.diametro = $('#diametroCotacao').val();
+			volume.tipoObjeto = $('#objectType').val();
+			volume.ar = ($('#ar').is(':checked') ? 1 : 0);
+			volume.mp = ($('#mp').is(':checked') ? 1 : 0);
+			volume.valorDeclarado = nroBra($('#valorDeclarado').val());
+			volume.idProduto = $('#idEmbalagem').val();
+			volume.cotacaoObtida = 1;
+
+			if ($('#idCotacao').val()) {
+				volume.idCotacao = $('#idCotacao').val();
+			}
+
+			volumesLogistica[iVolume] = volume;
+			Toast.create({ 'type': Toast.S, 'msg': msg });
+		} else {
+			Toast.create({ msg: 'Nenhum serviço foi selecionado!' });
+		}
+	}
+}
+
+function obterEmbalagemVolume(idEmbalagem) {
+	$.when(obterEmbalagensCubagem(false)).done(function() {
+		if ($.isEmptyObject(arrayJsonSearch(embalagensDisponiveis, 'id', idEmbalagem))) {
+			xajax_obterEmbalagem(idEmbalagem, function(embalagem) {
+				embalagensDisponiveis.unshift(embalagem);
+				$('#embalagem :nth-child(2)').before(
+					$('<option>', { 'value': embalagem.id, 'html': embalagem.nome, 'selected': true })
+				);
+				atualizarDimensoesVolume(embalagem.id, false);
+				$('#embalagemPeloNome').val($('#embalagem option:selected').text());
+			});
+		} else {
+			$('#embalagem').val(idEmbalagem);
+			atualizarDimensoesVolume(idEmbalagem, false);
+			$('#embalagemPeloNome').val($('#embalagem option:selected').text());
+		}
+	});
+}
+
+function obterEmbalagensCubagem(autoSelecionar) {
+	var deferred = $.Deferred();
+
+	$('#embalagem').removeAttr('original-title').addClass('tipsyOff').parent().removeClass('group-item-form-warning');
+
+	var itensPedido = obterItensCubagem(true);
+	if (itensPedido.length <= 0) {
+		$('#embalagem').attr('original-title', 'Não há itens para cubagem no pedido.').tipsy({ gravity: $.fn.tipsy.autoWE }).removeClass('tipsyOff').parent().addClass('group-item-form-warning');
+		return false;
+	}
+
+	xajax_obterEmbalagens(itensPedido, function(embalagens) {
+		if (embalagens.length == 0) {
+			$('#embalagem').attr('original-title', 'Os itens do pedido não cabem em nenhuma embalagem cadastrada.').tipsy({ gravity: $.fn.tipsy.autoWE }).removeClass('tipsyOff').parent().addClass('group-item-form-warning');
+
+			$.when(obterListaEmbalagens()).done(function() {
+				deferred.resolve();
+			});
+		} else {
+			listarEmbalagens(embalagens, autoSelecionar);
+			deferred.resolve();
+		}
+	});
+
+	return deferred.promise();
+}
+
+function obterListaEmbalagens() {
+	var deferred = $.Deferred();
+
+	$.get('services/embalagens.lookup.php', function(embalagens) {
+		embalagens = JSON.parse(embalagens);
+
+		if (embalagens.length == 0) {
+			$('#embalagem').attr('original-title', 'Não foram encontradas embalagens cadastradas.').tipsy({ gravity: $.fn.tipsy.autoWE }).removeClass('tipsyOff').parent().addClass('group-item-form-warning');
+		} else {
+			listarEmbalagens(embalagens);
+		}
+
+		deferred.resolve();
+	});
+
+	return deferred.promise();
+}
+
+function listarEmbalagens(embalagens, autoSelecionar) {
+	embalagensDisponiveis = embalagens;
+
+	$.each(embalagens, function(i) {
+		$('#embalagem').append(
+			$('<option>', { 'value': this.id, 'html': this.label, 'selected': (autoSelecionar && i == 0) })
+		);
+	});
+
+	if (autoSelecionar) {
+		$('#embalagem').change().attr('original-title', 'Embalagem selecionada automaticamente.<br>Os itens do pedido cabem nas embalagens listadas.').tipsy({ gravity: $.fn.tipsy.autoWE, html: true }).removeClass('tipsyOff').parent().addClass('group-item-form-success');
+	}
+}
+
+function atualizarDimensoesVolume(idEmbalagem, atualizarPeso, buscaPeloNome) {
+	if (typeof buscaPeloNome === 'undefined') {
+		var embalagem = arrayJsonSearch(embalagensDisponiveis, 'id', idEmbalagem);
+	} else {
+		var embalagem = buscaPeloNome;
+	}
+	var isReadonly = (! $.isEmptyObject(embalagem));
+
+	$('#larguraCotacao').val(embalagem.largura || 0).attr('readonly', isReadonly);
+	$('#alturaCotacao').val(embalagem.altura || 0).attr('readonly', isReadonly);
+	$('#comprimentoCotacao').val(embalagem.comprimento || 0).attr('readonly', isReadonly);
+
+	if (atualizarPeso) {
+		var peso = parseFloat(embalagem.pesoBruto || 0) + parseFloat($('#pesoCotacao').val()) - parseFloat($('#tmpPeso').val());
+		$('#tmpPeso').val(embalagem.pesoBruto || 0);
+		$('#pesoCotacao').val(peso.toFixed(3));
+	}
+
+
+	$('#idEmbalagem').val(embalagem.id || 0);
+	$('#objectType').attr('readonly', isReadonly);
+
+	if (isReadonly) {
+		$('#objectType').val('002');
+	}
+}
+
+function prepararImpressaoEtiquetasTransporte() {
+	var objetosPlps = [];
+	var confirmarImpressao = false;
+	$.each(datatable.getSelecteds(), function (i, idPedidoNota) {
+		var idObjetoPlp = this.idObjetoPlp || (this['data-objetoplp'] || 0);
+		if (!confirmarImpressao) {
+			var tipoIntegracao = (this.tipoIntegracaoLogistica || this['data-tipo-integracao-logistica']);
+			var logistica = LogisticFactory.create(tipoIntegracao);
+			confirmarImpressao = logistica.externalLabel();
+		}
+		if (parseInt(idObjetoPlp) == 0) {
+			objetosPlps.push({ 'idObjetoPlp': idObjetoPlp, 'idOrigem': idPedidoNota.id, 'possuiEtiqueta': 0 });
+		} else {
+			objetosPlps.push({ 'idObjetoPlp': idObjetoPlp, 'possuiEtiqueta': 1 });
+		}
+	});
+	if (objetosPlps.length > 0) {
+		if (confirmarImpressao) {
+			confirmarImpressaoEtiquetasTransporte(objetosPlps);
+		} else {
+			imprimirEtiquetasTransporte(objetosPlps);
+		}
+	} else {
+		mostrarAviso({ 'msg': 'Os itens selecionados não estão vinculados à nenhum serviço de logística.' });
+	}
+}
+
+function confirmarImpressaoEtiquetasTransporte(objetosPlps) {
+	showDialogMessage({
+		'alertTitle': 'Confirma a ação?',
+		'description': 'Esta opção realiza a impressão de etiquetas no modelo dos Correios.',
+		'content': '<p class="margin_top10">Para imprimir no modelo correto, utilize a impressão individual e para imprimir em lote acesse o módulo de <a href="integracoes.logisticas.php" target="_blank">integrações logísticas</a>.',
+		'textOk': 'Imprimir',
+		'textCancelar': 'Cancelar',
+		'fnOk': function () {
+			imprimirEtiquetasTransporte(objetosPlps);
+		}
+	});
+}
+
+function imprimirEtiquetasTransporte(objetosPlps) {
+	displayWait('impressaoWait', true, 'Imprimindo as etiquetas selecionadas, aguarde...');
+	xajax_imprimirRotulo({ 'etiquetas': objetosPlps }, 'etiqueta', 0);
+}
+
+function isVolumeInQuotation(volumeId, quotes) {
+	var exist = false;
+	quotes.forEach(function(element) {
+		var keyType = (['Correios', 'Mandae'].indexOf(tipoIntegracao) !== -1 ? 'codigo' : 'idServico');
+		var servico = getLogisticServiceById(element.serviceCode, keyType);
+		if (servico.id == volumeId && !element.errorCode) {
+			exist = true;
+			return;
+		}
+	});
+	return exist;
+}
+
+function getMostCheapQuote(quotes) {
+	var price;
+	quotes.forEach(function(element) {
+		if (!element.errorMsg) {
+			price = price || element.price;
+			return;
+		}
+	});
+	return price;
+}

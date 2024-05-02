@@ -1,0 +1,1 @@
+define(["hogan"],function(h){arguments[0]={"autocomplete/landlord":h.compile("{{#items}}\n<option value=\"{{_id}}\">{{name}}</option>\n{{/items}}")};return Object.assign.apply(null, arguments)});

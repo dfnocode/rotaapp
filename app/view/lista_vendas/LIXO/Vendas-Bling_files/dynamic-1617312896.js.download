@@ -1,0 +1,281 @@
+//todo problema ao selecionar o ítem
+function DynamicFilter(conf) {
+    this.config = {
+        inputs : null,
+        toArea: $('#filtro-dinamico'),
+        onChange: function(item) {},
+        same: true
+    };
+    this.filters = {};
+    this.current = null;
+    //this.timer = null;
+    LerConfiguracoes(this.config, conf);
+    if (typeof this.config.inputs == 'function') {
+        var ref = this;
+        this.config.inputs(function(inputs){
+            ref.config.inputs = inputs;
+            ref.build();
+        });
+    } else {
+        this.build();
+    }
+}
+
+DynamicFilter.prototype.buildInput = function(attrs) {
+    var input = $('<input>', { type:'text' });
+    return input.attr(attrs);
+};
+
+DynamicFilter.prototype.buildTreeSelect = function(options, attrs, item) {
+	var ref = this;
+	return $('<div>', attrs).treeSelect({
+		data: options,
+		maxSelectable: 1,
+		onSelect: function(idSelected) {
+			ref.insert(item, $('<input>', {type: 'hidden', value: idSelected}));
+        }
+	});
+};
+
+DynamicFilter.prototype.buildCombobox = function(options, attrs) {
+    return $('<select>', attrs).append(
+        function() {
+            var optionsHTML = [$('<option>',{ value: '', text:'Selecione'})];
+            for (var i in options) {
+                optionsHTML.push($('<option>', { value: i, text: options[i] }));
+            }
+            return optionsHTML;
+        }()
+    );
+};
+
+DynamicFilter.prototype.build = function() {
+    if (!this.config.inputs) {
+        return;
+	}
+	if (typeof Suggest == 'undefined') {
+		Script.include(['templates/components/autocomplete/autocomplete.js']);
+	}
+    var ref = this;
+    this.input = ref.buildInput({ placeholder: 'Adicionar filtros' , class: 'dynamic-filter'}).on('focus', function() {
+        if (ref.currInput && ref.currInput.input) {
+            //clearTimeout(ref.timer);
+            //ref.timer = null;
+            ref.currInput.input.trigger('dynamic:change');
+        }
+    });
+    this.config.toArea.html(
+        function() {
+            ref.filter = $('<div>', { class: 'dynamic-search'}) .append(
+                $('<div>',{ class:'dropdown'}).append(
+                    ref.input
+                )
+            );
+            return ref.filter;
+        }()
+    );
+    this.ac = new Suggest({
+        data: this.config.inputs,
+        input : this.input,
+        afterSelect: function(item) {
+            ref.show(item);
+        },
+        same: this.config.same
+    });
+    return;
+};
+
+DynamicFilter.prototype.bindChange = function(input, item) {
+    var ref = this;
+    input.on('dynamic:change blur', function() {
+        ref.insert(item, input);
+    });
+};
+
+ DynamicFilter.prototype.changeSelect = function(input, item) {
+//     var old = '';
+//     ref = this;
+     this.bindChange(input, item);
+//     input.on('click', function() {
+//         ref.timer = setTimeout(function() {
+//             ref.insert(item, input);
+//         }, 1000);
+//         if (old == input.val()) {
+//             return;
+//         }
+//         old = input.val();
+//         clearTimeout(ref.timer);
+//         ref.timer = setTimeout(function() {
+//             ref.insert(item, input);
+//         }, 1000);
+//         input.blur();
+//     });
+//     input.on('keyup', function(e) {
+//         if (e.keyCode == 13) {
+//             ref.timer = setTimeout(function() {
+//                 ref.insert(item, input);
+//             }, 1000);
+//         }
+//     });
+//     input.on('focus', function() {
+//         clearTimeout(ref.timer);
+//     });
+ };
+//todo on change value and press enter
+
+ DynamicFilter.prototype.changeInput = function (input, item) {
+//     var old = '';
+//     var ref = this;
+     this.bindChange(input, item);
+//     input.on('keyup', function(e) {
+//         if (e.keyCode == 13) {
+//             ref.timer = setTimeout(function() {
+//                 ref.insert(item, input);
+//             }, 1000);
+//         }
+//         if (old == input.val()) {
+//             return;
+//         }
+//         old = input.val();
+//         clearTimeout(ref.timer);
+//         ref.timer = setTimeout(function() {
+//             ref.insert(item, input);
+//         }, 1000);
+//     });
+//     input.on('focus', function() {
+//         clearTimeout(ref.timer);
+//     });
+ };
+
+DynamicFilter.prototype.show = function (item) {
+    var ref = this;
+    var filter = this.config.inputs[item.id];
+    if (filter.type == 'treeSelect') {
+		item.type = 'treeSelect';
+        filter.inputs = this.buildTreeSelect(filter.options, { class:'item-form tree-select', name: 'dynamics[]['+ item.id+']'}, item);
+    } else if (filter.options) {
+        item.type = 'select';
+        filter.inputs = this.buildCombobox(filter.options, { class:'form-control', name: 'dynamics[]['+ item.id+']'});
+        this.changeSelect(filter.inputs, item);
+    } else {
+        item.type = 'text';
+        filter.inputs = this.buildInput({ class: 'form-control', name: 'dynamics[]['+ item.id+']'});
+        this.changeInput(filter.inputs, item);
+    }
+    filter.group = $('<div>', { class: 'form-group'}).append(
+                        $('<div>', { class:'input-group filtros-customizados'}).append(
+                            $('<div>', { class: filter.type == 'treeSelect'? '' : 'input-group-addon', text: item.label, title: item.label }).append(
+                                ref.createCloseButton(item)
+                            ),
+                            filter.inputs
+                        )
+                    );
+    this.timer = null;
+    filter.group.insertBefore(this.input);
+    filter.inputs.focus();
+    this.input.val('');
+};
+
+DynamicFilter.prototype.createCloseButton = function(item) {
+    var ref = this;
+    var filter = this.config.inputs[item.id];
+    if (filter.type == 'treeSelect') {
+        return $('<span>', {class: 'fas fa-times', style: 'margin-left: 5px; cursor: pointer', 'item-id': item.id}).on('click', function() {
+            var itemId = $(this).attr('item-id');
+            ref.config.inputs[itemId].group.remove();
+            delete ref.ac.selecteds[itemId];
+            delete ref.filters[itemId];
+        });
+    }
+    return document.createDocumentFragment();
+}
+
+DynamicFilter.prototype.insert = function(item, input) {
+    var value = input.val();
+    if (!value) {
+        //this.currInput.group.remove();
+        //todo timer to remove
+        //todo remove only the item
+        this.config.inputs[item.id].group.remove();
+        delete this.ac.selecteds[item.id];
+        // if (this.filters[item.id]) {
+        delete this.filters[item.id];
+        // }
+        //this.input.focus();
+        return;
+    }
+    //todo multiples values
+    //if (!this.filters[item.id]) {
+        this.filters[item.id] = {
+            values : {},
+            type: item.type,
+            label: item.label
+        };
+    //}
+    var text = value;
+    if (item.type == 'select') {
+        text = $(input.find('option:selected')).text();
+    } else if (item.type == 'treeSelect') {
+		text = this.config.inputs[item.id].options[value].descricao;
+	}
+    //this.currInput.group.remove();
+    //this.input.focus();
+    var ref = this.filters[item.id].values;
+    if (!ref[text]) {
+        ref[text] = {
+            values : [value]
+        };
+        this.config.onChange({ values: ref[text].values , label: item.label });
+        return;
+    }
+    for (var i = 0; i < ref[text].values.length; i++) {
+        if (ref[text].values[i] == value) {
+            return;
+        }
+    }
+    ref[text].values.push(value);
+    this.config.onChange({ values: ref[text].values , label: text });
+};
+
+DynamicFilter.prototype.remove = function(item) {
+    if (!this.filters[item.id] || !this.filters[item.id].values[item.value]) {
+        return;
+    }
+    delete this.filters[item.id].values[item.value];
+};
+
+DynamicFilter.prototype.removeAll = function() {
+    for (var input in this.config.inputs) {
+        if (this.config.inputs[input].group){
+            this.config.inputs[input].group.remove();
+        }
+    }
+    this.ac.selecteds = {};
+    this.filters = {};
+};
+
+DynamicFilter.prototype.removeItem = function(item) {
+    if (this.config.inputs[item].group) {
+        this.config.inputs[item].group.remove();
+    }
+    delete this.ac.selecteds[item];
+    delete this.filters[item];
+};
+DynamicFilter.prototype.disableItem = function(item) {
+    if (!item) {
+        return;
+    }
+    this.removeItem(item);
+    this.ac.selecteds[item] = true;
+};
+DynamicFilter.prototype.enableItem = function(item) {
+    if (item) {
+        if (!this.filters || !this.filters[item]) {
+            delete this.ac.selecteds[item];
+        }
+        return;
+    }
+    for (item in this.config.inputs) {
+        this.enableItem(item);
+    }
+};

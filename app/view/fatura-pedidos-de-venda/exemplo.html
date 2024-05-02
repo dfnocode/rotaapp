@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
+<!--[if gt IE 8]>      <html class="no-js"> <!--<![endif]-->
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title></title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="">
+    </head>
+    <body>
+        <!--[if lt IE 7]>
+            <p class="browsehappy">You are using an <strong>outdated</strong> browser. Please <a href="#">upgrade your browser</a> to improve your experience.</p>
+        <![endif]-->
+                 
+            
+<div class="card">
+    <div class="card-header ui-sortable-handle">
+        <h2>Fatura do Pedido de Venda</h2>
+        <h4>Número: <span style="color:#37A661;">8009</span></h4>
+        <div class="card-tools" style="margin-right: 10px;">
+            <ul class="nav nav-pills ml-auto">
+
+                <li class="nav-item">
+                    <form action="pdf-gen.php" method="POST">
+                        <input type="hidden" name="num" value="8009">
+                        <button title='Imprimir - PDF' name='btn_pdf' type='submit' class='btn btn-primary float-right'><i class='fas fa-print'></i><span class="btn-resp"></span></button>
+                    </form>
+                </li>
+                &nbsp;
+                <li class="nav-item">
+                <a href="../lista_vendas/" class="btn btn-danger" type="button" title="Voltar para Pedidos de Venda"><i class="fas fa-list"></i>
+                <span class="btn-resp"></span></a>
+                </li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="card-body table-responsive">
+        <h3>Cliente</h3>
+        <i style="font-size: 11px;">LEMON PEPPER DESIGN</i><br><b>DIEGO FERNANDES NEVES OLIVEIRA</b><br><b>Endereço: </b>Rua T 62, 255 Setor Bela Vista <br>Goiânia - GO CEP: 74.823-330<br><b>Tel: </b>(62) 98230-8664 - dfno82@gmail.com<br><b>CPF: </b>942.495.801-30<br><b>IE/RG: </b><br>    </div>
+</div>   
+
+<div class="card">
+    <div class="card-header ui-sortable-handle">
+        <h2>Itens do Pedido</h2>
+        <div class="card-tools" style="margin-right: 10px;">
+            <ul class="nav nav-pills ml-auto">
+
+                <li class="nav-item">
+                <a href="../lista_vendas/editar_pedido.php?numero=8009" alt='Editar Pedido' title='Editar Pedido' type='button' class='btn btn-warning float-right'><i class='fas fa-edit'></i></a>                  
+                </li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="card-body table-responsive">
+        <table id="itens_do_pedido" class="display responsive hover compact nowrap">
+            <thead>
+                <tr>
+
+                    <th></th>
+                    <th>Produto</th>
+                    <th>Unid.</th>
+                    <th>Valor Unit.</th>
+                    <th>Qtde</th>
+                    <th>Desconto</th>
+                    <th>Subtotal</th>
+
+
+
+                </tr>
+            </thead>
+            <tbody>
+
+            
+                <tr role="row" class="even dpedido" data-id="151">
+                    <td class="clinha"><span class="badge badge-dark">
+                            1</span>
+                    </td>
+                    <td class="dpedidoitem">ALISAR CURUPIXA 7 X 1 BOLEADO       </td>
+                    <td class="dpedidoitem">JG </td>
+                    <td class="dpedidoitem"><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">&#82;&#36;</span>&nbsp;72,00</bdi></span> </td>
+                    <td class="dpedidoitem">
+                        123.463                    </td>
+                    <td class="dpedidoitem"><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">&#82;&#36;</span>&nbsp;342,44</bdi></span> </td>
+                    <td class="dpedidoitem"><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">&#82;&#36;</span>&nbsp;8.546,90</bdi></span> </td>
+                                    </tr>
+                
+                <tr role="row" class="even dpedido" data-id="157">
+                    <td class="clinha"><span class="badge badge-dark">
+                            2</span>
+                    </td>
+                    <td class="dpedidoitem">ALISAR TAUARI 2,30 X 10 X 1,5 CM  </td>
+                    <td class="dpedidoitem">JG </td>
+                    <td class="dpedidoitem"><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">&#82;&#36;</span>&nbsp;34,90</bdi></span> </td>
+                    <td class="dpedidoitem">
+                        1000.000                    </td>
+                    <td class="dpedidoitem"><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">&#82;&#36;</span>&nbsp;0,00</bdi></span> </td>
+                    <td class="dpedidoitem"><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">&#82;&#36;</span>&nbsp;34.900,00</bdi></span> </td>
+                                    </tr>
+                            </tbody>
+        </table>
+    </div>
+</div>
+
+        <script src="" async defer></script>
+    </body>
+</html>

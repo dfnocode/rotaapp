@@ -1,0 +1,3086 @@
+var filter;
+var dataAtual;
+var observacoes = '';
+var appletCupomCarregado = false;
+var idEmpresa = '';
+var possuirEstLancado = false;
+var filtroLojas = 'todas';
+var idConfUnidadeNegocio = 0;
+var dialog = $('<div></div>');
+var multiloja = false;
+var podeAlterarLojaAviso = true;
+var transitions = [];
+var situacoes = [];
+var filtroEnviarDadosLojaVirtual	= [
+	'Magento', 'VTex', 'Tray', 'OOK', 'Mkx', 'Shopify', 'MercadoShops', 'SkyHub', 'Fbits', 'CNova', 'Bling', 'RakutenOne', 'Ciashop', 'B2W',
+	'Prestashop', 'MercadoLivre', 'EzCommerce', 'Xtech', 'LojaIntegrada', 'PerasLoja', 'Starter', 'Z3', 'JetUol', 'MeusPedidos', 'Netshoes', 'Zattini',
+	'KanuiWS', 'TricaeWS', 'DafitiWS', 'VendasExternas', 'Walmart', 'RakutenGenesis', 'WooCommerceWH', 'Nuvemshop', 'Buscape', 'LojaModular', 'MagentoV2',
+	'iShoppingWS', 'PlataformaNeo', 'Amazon', 'FbitsWS', 'Carrefour', 'ViaVarejo', 'IntegraCommerce', 'Bis2Bis', 'OtimoNegocio', 'WideCommerce', 'Hibrido',
+	'LeroyMerlin', 'LojaMestre','CoreCommerce', 'Zoom', 'Colombo', 'MadeiraMadeira', 'Wix', 'Simplo7', 'RicardoEletro', 'Centauro', 'Kabum', 'LojaQueVende', 'GPA',
+	'Wish'
+];
+var filtroRastreamentoLojaVirtual	= [
+	'Magento', 'VTex', 'OOK', 'Shopify', 'MercadoShops','SkyHub','Fbits', 'Ciashop', 'Tray',
+	'B2W', 'Prestashop', 'Xtech', 'LojaIntegrada', 'PerasLoja', 'Starter', 'Z3', 'Netshoes', 'Zattini', 'KanuiWS', 'TricaeWS',
+	'DafitiWS', 'VendasExternas', 'WooCommerceWH', 'Nuvemshop', 'Buscape', 'LojaModular', 'MagentoV2', 'iShoppingWS', 'Amazon',
+	'Carrefour', 'IntegraCommerce', 'Bis2Bis', 'OtimoNegocio', 'WideCommerce', 'Hibrido', 'LeroyMerlin', 'LojaMestre','CoreCommerce',
+	'Colombo', 'MadeiraMadeira', 'Wix', 'Simplo7', 'Centauro', 'Kabum', 'LojaQueVende', 'GPA'
+];
+var filtroEnviarNFe = [
+	'Magento', 'VTex', 'OOK', 'Mkx', 'MercadoShops', 'Tray', 'SkyHub', 'Fbits', 'RakutenOne', 'Ciashop', 'MercadoLivre',
+	'EzCommerce', 'B2W', 'CNova', 'LojaIntegrada', 'PerasLoja', 'Starter', 'Z3', 'JetUol', 'MeusPedidos', 'Netshoes', 'Zattini',
+	'Prestashop', 'VendasExternas', 'KanuiWS', 'TricaeWS', 'DafitiWS', 'RakutenGenesis', 'WooCommerceWH', 'LojaModular',
+	'MagentoV2', 'iShoppingWS', 'FbitsWS', 'Carrefour', 'ViaVarejo', 'IntegraCommerce', 'Bis2Bis', 'OtimoNegocio',
+	'WideCommerce', 'Hibrido', 'LeroyMerlin', 'LojaMestre','CoreCommerce', 'Zoom', 'Colombo', 'MadeiraMadeira', 'Simplo7', 'RicardoEletro', 'Centauro',
+	'Kabum', 'LojaQueVende', 'Nuvemshop', 'GPA'
+];
+var filtroNumeroVendaLojaVirtual = [
+	'Magento', 'Shopify', 'MagentoV2', 'Bis2Bis', 'OtimoNegocio', 'WideCommerce', 'Hibrido'
+];
+var filtroStatusLoja = [
+	'OOK', 'VTex', 'Tray', 'Fbits', 'RakutenOne', 'Ciashop', 'B2W', 'SkyHub', 'EzCommerce', 'Xtech', 'LojaIntegrada',
+	'PerasLoja', 'Starter', 'Z3', 'JetUol', 'Netshoes', 'Zattini', 'KanuiWS', 'TricaeWS', 'DafitiWS', 'VendasExternas',
+	'Walmart', 'RakutenGenesis', 'WooCommerceWH', 'LojaModular', 'MagentoV2', 'iShoppingWS', 'PlataformaNeo', 'Amazon',
+	'FbitsWS', 'Carrefour', 'Prestashop', 'IntegraCommerce', 'CNova', 'LeroyMerlin','CoreCommerce', 'Zoom',"ViaVarejo", 'Colombo', 'MadeiraMadeira', 'Simplo7',
+	'RicardoEletro', 'Centauro', 'LojaQueVende', 'Kabum', 'Wish', 'GPA'
+];
+var filtroEnviarPedidoLojaVirtual	= ['Bling'];
+var permiteSincronizacao = ['SkyHub'];
+var datatable, permissionObj;
+function initDependencies(params) {
+	$.when(
+		getPermissions()
+	).then(function() {
+		initForm(params);
+	});
+}
+function getPermissions() {
+	if (!permissionObj) {
+		permissionObj = new Permission({fnSetPermissions: xajax_getPermissions});
+	}
+	return permissionObj.loaded;
+}
+function initForm(params) {
+	dataAtual = params.data;
+	filter = {
+		resetValues: {
+		  'filtro-fatura': 'T',
+		  lojasVinculadas: 'todas',
+		  'filtro-criterio':'todos',
+		  unidadesNegocioSelect: '0',
+		  'pesquisa-mini': {
+		  	event: function() {
+		  		$('#idContatoConsulta').val(0);
+		  	}
+		  }
+		},
+		dynamic: {
+			inputs: function(callback) {
+				xajax_getDynamicFilters(function(result) {
+					if (result['v.idCategoria'] && result['v.idCategoria'].options) {
+						result['v.idCategoria'].options = $.extend(result['v.idCategoria'].options, {0: {id: 0, descricao: 'Sem categoria'}});
+					}
+					callback(result);
+				});
+			},
+			same: false
+		},
+		dynamicPlaceholder: 'Pesquisar por nome, e-mail, CEP, CPF/CNPJ ou n° do pedido',
+		afterOpen: function() {
+			$('#search-left-area').css('padding-bottom', $('#frameFeedback').outerHeight() + 69);
+		},
+		commonActions:[
+			{
+				id: 'sync-virtualStore',
+				icon: 'fas fa-sync',
+				title: 'Sincronizar pedidos da Loja',
+				class: 'act-sync',
+				dataSystemAction: 'Multilojas',
+				text: ' Sincronizar',
+				style: 'width:auto;'
+			},
+			{
+				icon: 'fas fa-print',
+				title: 'Imprimir listagem de vendas',
+				class: 'act-relatorio'
+			},
+			{
+				icon: 'fas fa-trash-alt',
+				title: 'Excluir pedidos selecionados',
+				dataSystemAction: 'VendasRegistroEX',
+				class: 'act-excluir'
+			}
+		]
+	  };
+	initActionBar();
+	montarDataTable();
+	datatable.setActionBar(actionBar);
+	new FeedbackFrame({
+		'module':'Vendas',
+		'question': 'Você gostou do layout ?',
+		afterShow: function () {
+			var frame = $('#frameFeedback');
+			$('#search-left-area').css('padding-bottom', frame.outerHeight() + 69);
+			frame.css('padding-top', '20px');
+		}
+	});
+
+	contato = new ContatoRapido({
+		input: 'idContato',
+		id: 'contato',
+		name: 'nomeContato',
+		tipoContato: 'cliente',
+		message : {
+			naoEncontrado : 'Cliente não encontrado',
+		},
+		buttons: {
+			pessoasContato : true,
+			pesquisar: true,
+			historico : true
+		},
+		afterChange: function(contato) {
+			validarDisponibilidadeServicos();
+			if (!contato.id) {
+				return;
+			}
+			if (!contato.cargaInicial) {
+				xajax_buscarDadosContato($('#idContato').val(), false, function(res) {
+					if ($('#id').val() == 0) {
+						if (!res.vendedorInvalido && res.vendedorDados) {
+							$('#idVendedor').val(res.dadosContato['idVendedor']);
+							$('#nomeVendedor').val(res.vendedorDados['nome']);
+							comissaoSetIdVendedor(res.dadosContato['idVendedor'], !res.vendedorInvalido);
+						}
+						if (res.dadosContato['idCategoria']) {
+							setarCategoria(res.dadosContato['idCategoria']);
+						}
+
+						if ($('#pag_condicao').val() == '') {
+							$('#pag_condicao').val(res.dadosContato['condicao']);
+						}
+
+						if (res['acrescimoDesconto']) {
+							setarAcrescimoDesconto(res['acrescimoDesconto']);
+						}
+					}
+
+					$('#historico i').css('color', res['color']);
+
+					removeRelacaoListaContato();
+					if (res.listas.listasContato.length) {
+						adicionarListasPrecos(res.listas);
+					}
+				});
+			}
+			validarDisponibilidadeServicos();
+			xajax_setarPrimeiraCompra($('#idContato').val(), $('#id').val(), function(res) {
+				if (!res.contatoIgual) {
+					$('#primeiraCompra').val(res.primeiraVenda ? 'V' : '');
+				}
+			});
+		}
+	});
+	shortcuts = new Shortcuts();
+	idEmpresa = params.idEmpresa;
+	$(document).history(function(e, currentHash, previousHash) {
+		currentHash = $.history.getCurrent();
+
+		ocultarAvisoRemocaoFuncionalidade();
+		if (currentHash == 'list') {
+			displaySearch();
+		} else if (currentHash == 'add') {
+			incluirVenda();
+		} else if (currentHash.split('/')[0] == 'edit') {
+			editCloneVenda($.history.getCurrent().split('/')[1], 'N');
+		} else {
+			obterPedidoIntegracao(currentHash);
+		}
+	});
+	if ($.history.getCurrent().split('/')[0] == 'edit') {
+		vendaId = $.history.getCurrent().split('/')[1];
+		editCloneVenda(vendaId, 'N');
+		$('#desconto').focus();
+	} else if ($.history.getCurrent() == 'add') {
+		incluirVenda();
+	} else if ($.history.getCurrent().split('/')[0] == 'idOrigem') {
+		obterVendaPorOrcamento($.history.getCurrent().split('/')[1]);
+		displayForm();
+		$('#itens').hide();
+		$('#trh').hide();
+		$('#desconto').focus();
+	}  else if (!obterPedidoIntegracao($.history.getCurrent()) && $.history.getCurrent().split('/')[0] != '') {
+		if ($.history.getCurrent().split('/')[0] != 'list') {
+			getOrderByForm({
+				integrationType	: $.history.getCurrent().split('/')[0],
+				idIntegracao : $.history.getCurrent().split('/')[1],
+				numero : $.history.getCurrent().split('/')[2],
+				idLojaVirtuais: $.history.getCurrent().split('/')[3],
+				importarPara : $.history.getCurrent().split('/')[5]
+			});
+		}
+	}
+
+	xajax_carregarFiltroLojas(function(res) {
+		adicionarEventosFiltroLojas();
+		if (res.avisos && res.avisos.length) {
+			montarMensagemIntegracao(res.avisos);
+		}
+		var listaLojas = [];
+		for (var index in res.lojas) {
+			listaLojas.push(
+				$('<option>', {'id': res.lojas[index].id, 'value': res.lojas[index].id, 'tipoIntegracao': res.lojas[index].tipoIntegracao, 'text': res.lojas[index].nome})
+			);
+		}
+		$('#lojasVinculadas').empty().append(
+			$('<option>', {'id': 'todas', 'value': 'todas', 'text': 'Todas'}),
+			$('<option>', {'id': '0', 'text': 'Nenhum'}),
+			listaLojas
+		);
+	});
+
+	xajax_obterParametrosVendas(function(res) {
+		setObservacoes(res.obs_padrao);
+		setPreencherFreteComCotacao(res.preencherFreteComCotacao, res.preencherFreteComCotacao_valorAdicional);
+	});
+	$('.act-gerar-notas').on('click', function() {
+		if (datatable.validateSelectedItems()) {
+			var idsSelected = getIdsSelectedItens();
+			DialogMessage.question({
+				'description': 'Deseja realmente gerar nota(s) de <b>'+ idsSelected.length +'</b> venda(s) selecionada(s)?',
+				'fnOk': function() {
+						gerarNotasFiscaisSelecionadas(idsSelected, 'S');
+				}
+			});
+		}
+	});
+	$('.act-relatorio').click(function() {
+		var filtros = getSearchFilter();
+		filtros.tituloRelatorio = $('.titulo span:visible').html();
+		window.open('relatorios/relatorio.vendas.php?' + filter.serialize(filtros));
+		return false;
+	});
+	$('.act-print-selecionados').click(function() {
+		if (datatable.validateSelectedItems()) {
+			var params = {
+				'idsVenda': datatable.getSelectedsIdsBySelection(),
+				'vendasSelecionadas': true
+			};
+			direcionarImpressaoVenda(params, function() {
+				$('#idVenda').val(params.idsVenda);
+				$('#imprimeOrdem').val($('#options_print_receipt').val());
+				$('#desmembrarEstrutura').val($('#desmembrarEstruturaVenda').is(':checked') ? 'S' : 'N');
+				$('#direcionador').submit();
+			});
+		}
+		return false;
+	});
+	$('.act-excluir').on('click', function() {
+		if (!datatable.validateSelectedItems()) {
+			return;
+		}
+		var idsSelecionados = [];
+		var exibeMsgContasEstoque = false;
+		var msg = 'Deseja realmente excluir a(s) <b>' + datatable.selecteds.length + '</b> venda(s) selecionada(s)?';
+		$.each(datatable.getSelecteds(), function() {
+			if (this.markers.legConta || this.estoque) {
+				exibeMsgContasEstoque = true;
+			}
+			idsSelecionados.push(this.id);
+		});
+		DialogMessage.question({
+			'description': (exibeMsgContasEstoque ? '<b>' + msg + '</b><br><br>- A exclusão não fará o estorno de contas e estoque.' : msg),
+			'fnOk': function() {
+				displayWait('vendasWait', true, 'Excluindo vendas, por favor aguarde...');
+				xajax_excluirVendas(idsSelecionados, function(res) {
+					if (res.permissionDenied || res.isVendedor) {
+						permissaoErro(res.permissionDenied);
+					} else {
+						listar();
+					}
+
+					datatable.resetSelecteds();
+					closeWait('vendasWait');
+				});
+			}
+		});
+	});
+	$('.act-importarPedidosShopDelivery').click( function() { mostrarPopupImportacaoPedidosShopDelivery(); return false;});
+	$('.act-sync').click(function() {
+
+		if($("#lojasVinculadas").val() != "todas" && $("#lojasVinculadas").val() != "Nenhum"){
+			DialogMessage.question({
+				'description': 'Você confirma a importação de pedidos ? <BR><BR> <b>OBS:</b> <i>Lembre-se que este processo pode demorar alguns minutos.</i>',
+				'fnOk': function() {
+				xajax_executaImportacaoViaCronManualmente($("#lojasVinculadas").val(), $("select#lojasVinculadas option:selected").attr('tipointegracao'), function(dados) {
+						if(dados.disponivel){
+							if(dados.pulling){
+								if(dados.error){
+									Toast.create({type: Toast.E, title: "Falha", msg: dados.msg});
+								}else{
+									Toast.create({type: Toast.S, title: "Sucesso", msg: dados.msg});
+									listar();
+								}
+							}else{
+								DialogMessage.question({
+									'description': dados.msg,
+									'fnOk': function() {
+										 	window.location.href = dados.url;
+										}
+									});
+							}
+						}else{
+							Toast.create({type: Toast.W, title: "Atenção", msg: dados.msg});
+						}
+
+
+
+					});
+
+					/*xajax_excluirVendas(idsSelecionados);
+					datatable.resetSelecteds();*/
+				}
+			});
+		}else{
+			Toast.create({type: Toast.W, title: "Atenção", msg: "É necessário Selecionar a Loja pra efetuar a Sincronização."});
+		}
+
+	});
+	$('#link-close-pesquisa').click(function() {
+		togglePesquisa();
+	});
+	$('#link-pesquisa').click(function() {
+		togglePesquisa();
+	});
+	$('#etiqueta_uf').change(function() {
+		$('#div_pais').toggle($(this).val() == 'EX');
+	});
+	$('#etiqueta_nomePais').autocomplete({
+		source : 'services/pais.lookup.php',
+		delay:250,
+		minLength:2,
+		selectOnly:true
+	});
+	$('#aNovaLinhaItem').on('click', function() {
+		validarAdicionarItem();
+		return false;
+	});
+	$('#psqVendedor').autocomplete({
+		source: 'services/vendedores.lookup.php',
+		validate : 'Vendedor não encontrado no sistema',
+		delay: 250,
+		minLength:2,
+		selectOnly: true
+	});
+	$('.act-etiquetas').on('click', function() {
+		etiquetas();
+	});
+	$('#contato').on('keyup', function(){
+		validarDisponibilidadeServicos();
+	});
+	$('#nomeVendedor').autocomplete({
+		source: 'services/vendedores.lookup.php',
+		select: function(event, ui) {
+			setIdVendedorjQuery(ui.item);
+		},
+		change: function(event, ui) {
+			testCompleter($(this), $('#idVendedor'), 'Vendedor não encontrado no sistema');
+		},
+		delay :250,
+		minLength:3,
+		selectOnly :true
+	});
+	$('#transportador').autocomplete({
+		source: 'services/transportador.lookup.php',
+		delay: 500,
+		minLength:2,
+		selectOnly:true,
+		select: function(event, ui) {
+			$('#idTransportador').val(ui.item.id);
+		},
+		change: function(event, ui) {
+			if (ui.item == null) {
+				$('#idTransportador').val(null);
+			} else {
+				$('#idTransportador').val(ui.item.id);
+			}
+		},
+		'fnRenderItemUi': UiAutocompleteItem.cnpj
+	});
+	$('#nomePsqProduto').autocomplete({
+		source: 'services/produtos.lookup.php',
+		delay: 250,
+		minLength: 2,
+		selectOnly: true,
+		validate : {
+			message: 'Produto não encontrado',
+			idField: 'idPsqProduto'
+		}
+	});
+	$('#nomePsqComponente').autocomplete({
+		source: 'services/produtos.lookup.php',
+		delay: 250,
+		minLength: 2,
+		selectOnly: true,
+		validate : {
+			message: 'Produto não encontrado',
+			idField: 'idPsqComponente'
+		}
+	});
+	$('#buscaEnderecoDiferente').click(function() {
+		var cepVal = $('#etiqueta_cep').val();
+		if(cepVal) {
+			var itens = '{"etiqueta_cep":"cep","etiqueta_municipio":"cidade","etiqueta_uf":"uf","etiqueta_bairro":"bairro","etiqueta_endereco":"endereco","etiqueta_id_municipio":"codCidade"}';
+			var itensValidar = ['etiqueta_cep', 'etiqueta_municipio'];
+			$.processaControle(cepVal, itens, itensValidar, function() {
+				$('#buscaEnderecoDiferente').show();
+			});
+			$(this).hide();
+		}
+		return false;
+	});
+	vincularEnventosCamposLinha();
+	carregarSituacoes().then(function() {
+		return $.when(carregarTransicoes());
+	});
+	$('.act-mail').click(function() {
+		abrirPopupEnvioDocumento($('#id').val(), $('#idContato').val());
+	});
+	initFormatters($('#dec_qtde').val(), $('#dec_valor').val());
+	$('#produto').tipsy({gravity: $.fn.tipsy.autoWE});
+	$('#nomeVendedor').tipsy({gravity: $.fn.tipsy.autoWE});
+	$('#municipioPsq').autocomplete({
+		source: 'services/municipio.lookup.php',
+		validate : 'Cidade inválida',
+		select: function(event, ui) {
+			$('#psqEstado').val(ui.item.uf);
+		},
+		delay: 250,
+		minLength:2,
+		selectOnly: true
+	});
+	$('.act-alterarSituacaoPedidosSelecionado').click(function() {
+		if (!datatable.validateSelectedItems()) {
+			return;
+		}
+		createDialog({
+			htmlTitle: 'Alteração de situação das vendas',
+			content: $('#form_alteracao_situacao_pedidos_selecionados'),
+			width: 440,
+			fnCreate: function() {
+				$('#situacoes_vendas').empty();
+				$.each(situacoes, function() {
+					if (this.valor != 11) {
+						$('#situacoes_vendas').append(
+							$('<div>', {'class': 'group-item-form', 'style': 'margin-bottom: 4px;'}).append(
+								$('<div>', {'class': 'input-radio'}).append(
+									$('<input>', {'type': 'radio', 'name': 'situacao', 'id': 'situacao' + this.id, 'value': this.id}),
+									$('<label>', {'class': 'label-item-form-input', 'for': 'situacao' + this.id, 'text': this.nome})
+								)
+							)
+						);
+					}
+				});
+				$('#enviarRastreamentoMagento').prop('checked', true);
+			},
+			'fnOk': function() {
+				mudarSituacaoVendas();
+			}
+		});
+	});
+	$(".tabs-side").tabs({event: "mouseover"});
+	$('#pag_botaoCalcular').on('click', function() {
+		if (!$('#' + idCampoData).val()) {
+			$('#' + idCampoData).addClass('warning');
+			DialogMessage.warning({'description': 'Preencha o campo de data antes de gerar as parcelas.'});
+		} else {
+			$('#' + idCampoData).removeClass('warning');
+		}
+	});
+	bindDataVendaAlterada($('#' + idCampoData));
+	listenerPermissaoForm();
+	$('#pesquisa-mini').inputLookup({
+		'callback': listar,
+		'lookupUrl': 'services/contatos.lookup.php?t=2',
+    	'onChange': function(event) {
+    		clearHidenResult(event, $('#idContatoConsulta'))
+    	},
+    	'onSelect': function(item) {
+    		setIdContatoConsulta(item.id);
+    	}
+	});
+	if ($('#integracaoLojaVirtual').val() != 1) {
+		$('#dadosLoja').remove();
+		$('#confUnidadeNegocio').remove();
+		$('#enviarDadosLojaVirtual').remove();
+		$('#divPsqLoja').remove();
+	}
+	if ($('#utilizaTransportadora').val() == 'N') {
+		$('#totalFrete').addClass('invisivel');
+		$('#dadosTransportadora').hide();
+		$('#divPsqTransportador').remove();
+	} else {
+		if ($('#utilizaTransportadora').val() == 'O') {
+			$('#dadosTransportadora').prepend(
+				$('<h3>', { class:'subtitulo'}).append(
+					'Transportador&nbsp;',
+					$('<span>',{ id:'textoExibirOcultarTransportador', onclick:'exibirOcultarTransportador()', class:'link', text:'exibir'})
+				)
+			);
+		} else {
+			$('#dadosTransportadora').prepend($('<h3>', { class:'subtitulo', text:'Transportador'}));
+			exibirOcultarTransportador();
+		}
+	}
+	if ($('#utilizaModuloVendedor').val() != '1') {
+		$('#dadosVendedor').remove();
+		$('#divPsqVendedor').remove();
+		$('<span>', { class:'linha_form wh100' }).insertAfter('#dadosLoja');
+	}
+	if ($('#utilizaIntegracaoLogistica').val() != 1) {
+		$('#pesqCodRastreio').remove();
+	}
+	if ($('#vendaForm #tab-area li').size() == 1) {
+		$('#vendaForm #tab-area').html($('<h3>', { class:'subtitulo', text:'Itens' }));
+		$('#vendaForm #tab-area').parent().css('margin-bottom', '0px');
+	}
+	$('#help-gif').on('click', function() {
+		openHelpDialog('Ajuda - Faturar pedido de venda');
+	});
+	$('#loja').on('change', function() {
+		if (!podeAlterarLojaAviso) {
+			DialogMessage.warning({ 'description': 'O pedido está vinculado ao controle de caixa da loja, ao alterar a loja o pedido não pertencerá mais ao caixa.' });
+		}
+	});
+	$(document).on('click', '.clear-input', function() {
+		$('#idContatoConsulta').val('0');
+	});
+	$('#prazoEntrega').on('change', function() {
+		$(this).val(formatNumber($(this).val()));
+	});
+	$('#numeroPedido').on('change', function() {
+		$('#numeroManual').val(1);
+	});
+	setPathEnt('cupom:path_arquivo_ent');
+	setPathSai('cupom:path_arquivo_sai');
+	adicionarAtalhos();
+	$('#btn-incluir').on('click', incluirVenda);
+	$('.icon-info-sign:not(.no-tipsy)').tipsy({'gravity': 'w', 'html': 'html'});
+
+	$('#produto').on('keypress', function(e) {
+		if (e.keyCode == 13) {
+			completerProduct(e, 'produto', 'setIdProduto', 'S', true);
+		}
+
+		limparCodigoProduto(e);
+		clearHidenResult(e, $('#produtoId'));
+	});
+
+	$('#vendaForm #loja').on('change', function() {
+		verificarItensVendaLoja();
+		listarUnidadesDeNegocioEstoque($('#loja').val(), 0);
+	});
+
+	$('#vendaForm #idConfUnidadeNegocio').on('change', function() {
+		setarIdConfUniNeg($(this).val());
+		atualizarInfoEstoqueEspecifico();
+	});
+
+	$(document).on('blur', 'input[name="dynamics[][c.celular]"]', function() {
+		$(this).val(formatarTelefone($(this).val()));
+	});
+
+	$('#idListaPreco').on('change', function() {
+		recalcularItensListaPreco();
+	});
+
+	$('#sync-virtualStore').css('display','none');
+
+	autoCompleteProduto();
+
+	$('#cnpjIntermed').mask('00.000.000/0000-00', {'reverse': true});
+}
+
+function obterPedidoIntegracao(currentHash) {
+	var hash = currentHash.split('/');
+	if (!hash[0] || hash.length < 2) {
+		return false;
+	}
+	var integration = hash[0][0].toUpperCase() + hash[0].substring(1);
+	if (hash[0] == 'Maxistore') {
+		integration = 'Interspire';
+	} else if (hash[0] == 'mercadolivre') {
+		integration = 'MercadoLivre';
+	} else if (hash[0] == 'mercadoshops') {
+		integration = 'MercadoShops';
+	} else if (hash[0] == 'ishopping') {
+		integration = 'iShopping';
+	} else if (hash[0] == 'LojaIntegrada') {
+		integration = 'LojaIntegrada';
+	}
+	var fn = window['xajax_' + (integration == 'Jet' ? 'getOrder': 'obterPedido') + integration];
+	if (!fn) {
+		return false;
+	}
+	clearForm();
+	displayForm();
+	displayWait('pleasewait');
+	for (var diff = 3 - hash.length; diff > 0; diff--) {
+		hash.push('');
+	}
+	hash.shift();
+	fn.apply(this, hash.push(function() {
+		var sufix = '';
+		if (integration == 'Magento' || integration == 'Mercadolivre' || integration == 'MercadoShops') {
+			sufix = '-(multiloja)';
+		} else if (integration == 'Interspire') {
+			integration = 'Maxistore';
+		} else if (integration == 'iShopping') {
+			integration = 'iset-(ws)';
+		}
+		exibirAvisoRemocaoFuncionalidade('?item=integracao-com-' + integration.match(/[A-Z][a-z]+|[0-9]+/g).join('-').toLowerCase() + sufix);
+	}));
+	return true;
+}
+
+function gerarNfceSelecionadas() {
+	if (datatable.validateSelectedItems()) {
+		var idsSelected = getIdsSelectedItens();
+		DialogMessage.question({
+			'description': 'Deseja realmente gerar NFC-e(s) de <b>'+ idsSelected.length +'</b> venda(s) selecionada(s)?',
+			'fnOk': function() {
+				gerarNotasFiscaisSelecionadas(idsSelected, 'C');
+			}
+		});
+	}
+}
+
+function etiquetas() {
+	if (datatable.validateSelectedItems()) {
+		prepararImpressaoEtiquetasTransporte();
+	}
+	return false;
+}
+
+function declaracaoConteudo() {
+	if (datatable.validateSelectedItems()) {
+		imprimirDeclaracoesConteudo();
+	}
+	return false;
+}
+
+function faturarPedidosSelecionados() {
+	if (!datatable.validateSelectedItems()) {
+		return;
+	}
+	DialogMessage.question({
+		description: 'Deseja realmente faturar <b>'+ datatable.getSelectedsIds().length +'</b> vendas(s) selecionada(s)?',
+		fnOk: function() {
+			var selecteds = datatable.getSelecteds();
+			var pedidos = [];
+			for (var i in selecteds) {
+				pedidos.push({
+					cliente: selecteds[i].idContato,
+					idVenda: selecteds[i].id,
+					idVendedor: selecteds[i].idVendedor,
+					existeNota: (selecteds[i].markers.hasNFe || '')
+				});
+			}
+			xajax_faturarVariosPedidos(pedidos, function(response) {
+				if (response.errors.length) {
+					mostrarAvisos(response.errors, 'error', 'Faturar pedidos selecionados')
+				} else if (response.redirect) {
+					window.location = response.redirect;
+				}
+			});
+		}
+	});
+}
+
+function importarPedidosUol() {
+	$('<div>',{ id:'dlgImportacaoPedidosUol', style:'text-align:left;'}).append(
+			'<div>Selecione o arquivo(.xml) para a realização da importação.<br/></div><br/>',
+			$('<div>',{ id:'file-uploader'}).append(
+				'<noscript>' +
+					'<p>Upload de arquivos precisa do Javascript habilitado para funcionar.</p>' +
+				'</noscript>'
+			)
+	).dialog({
+		modal: true,
+		resizable: false,
+		width: 450,
+		title: 'Importação de Pedidos - UOL Shopping',
+		buttons: {
+			'Importar': function() {}
+		}, create:function() {
+			$(this).closest('.ui-dialog').find('.ui-button').eq(1).addClass('button-default')
+															.css('min-width', '45px').css('height', '26px')
+															.attr('id','importarPedidoArquivo')
+															.css('display','none');
+		},
+		open: function() {
+			initUploader('UOLShopping');
+		},
+		close:function() {
+			$(this).dialog('destroy');
+		}
+	});
+}
+
+function shopDelivery() {
+	$('<div>',{ id:'dlgImportacaoPedidosShopDelivery', style:'text-align:left;'}).append(
+		'<div>Selecione o arquivo(.xml) para a realização da importação.<br/></div><br/>',
+		$('<div>', { id:'file-uploader'}).append(
+			'<noscript>' +
+				'<p>Upload de arquivos precisa do Javascript habilitado para funcionar.</p>' +
+			'</noscript>'
+		)
+	).dialog({
+			resizable: false,
+			width: 450,
+			modal: true,
+			title: 'Importação de Pedidos - Shop Delivery',
+			buttons: {
+				'Importar': function() {
+				}
+		},
+		create:function() {
+			$(this).closest('.ui-dialog').find('.ui-button').eq(1).addClass('button-default')
+																  .css('min-width', '45px').css('height', '26px')
+																  .attr('id','importarPedidoArquivo')
+																  .css('display','none');
+		},
+		open: function() {
+			initUploader('ShopDelivery');
+		},
+		close:function() {
+			$(this).dialog('destroy');
+		}
+	});
+}
+
+function importarPedidosGroupon() {
+	$('<div>', { id:'dlgImportacaoPedidosGroupon', style:'text-align:left;'}).append(
+		$('<div>',{ id:'descricaoUploaderPedidos', html:'Selecione o arquivo(.xls) para a realização da importação.<br/>'}),
+		$('<div>', { id:'file-uploader'}).append(
+			'<noscript>' +
+				'<p>Upload de arquivos precisa do Javascript habilitado para funcionar.</p>' +
+			'</noscript>'
+		),
+		$('<span>', { class:'linha_form wh100', id:'spGeracaoParcelasGroupon', style:'display: none;'}).append(
+			$('<input>', { type:'checkbox', class:'caption', id:'naoGerarParcelas', name:'naoGerarParcelas', value:'S'}),
+			$('<label>', { for:'naoGerarParcelas', text:'Não gerar parcelas na criação das vendas.'})
+		)
+	).dialog({
+		modal: true,
+		resizable: false,
+		width: 450,
+		title: 'Importação de Pedidos - Groupon',
+		buttons: {
+			'Importar': function() {
+			}
+		},
+		create:function() {
+			$(this).closest('.ui-dialog').find('.ui-button').eq(1).addClass('button-default')
+																  .css('min-width', '45px').css('height', '26px')
+																  .attr('id','importarPedidoArquivo')
+																  .css('display','none');
+		},
+		open: function() {
+			initUploader('Groupon');
+		},
+		close:function() {
+			$(this).dialog('destroy');
+		}
+	});
+}
+
+function enviarRastreioLojaVirtualSelecionado() {
+	if (!datatable.validateSelectedItems()) {
+		return false;
+	}
+	var pedidos = [];
+	$.each(datatable.getSelecteds(), function() {
+		pedidos.push({
+			cliente: parseFloat(this.idContato),
+			idVenda: parseFloat(this.id),
+			numeroVenda: parseFloat(this.numeroPedido),
+			codigoRastreamento: this.etiquetaCorreios,
+			numeroLojaVirtual: this.idMagento,
+			tipoIntegracao: this.tipoIntegracao
+		});
+	});
+	if (!$.isEmptyObject(pedidos)) {
+		displayWait('vendasWait', true, 'Enviando rastreamento para a loja virtual');
+		xajax_enviarCodigoRastreamento(pedidos);
+	} else {
+		$('<div>', { id:'shipTracking', style:'text-align:left;'}.append(
+			'<p>Por favor, selecione os pedidos que deseja enviar o código de rastreamento para a loja virtual.</p>'
+		)).dialog({
+			modal: true,
+			resizable: false,
+			width: 325,
+			title: 'Envio de rastreamento',
+			buttons: {
+				Ok: function() {
+					$(this).dialog('destroy');
+				}
+			},
+			create: function() {
+				$(this).closest('.ui-dialog').find('.ui-button').eq(1).addClass('button-default')
+																	  .css('min-width', '45px').css('height', '26px');
+			},
+			close: function() {
+				$(this).dialog('destroy');
+			}
+		});
+	}
+}
+
+function imprimirSelecionados() {
+	if (!datatable.validateSelectedItems()) {
+		return;
+	}
+	var params = {
+		idsVenda: datatable.getSelectedsIds({'asString': true}),
+		ordemProducao: true
+	};
+	direcionarImpressaoVenda(params, function() {
+		$('#idPedidoVenda').val(params.idsVenda);
+		$('#imprimeOrdemProducao').val($('#options_print_receipt').val());
+		$('#ocultarItensTerceiros').val(($('#ocultar_terceiros').is(':checked') ? 'S' : 'N'));
+		$('#direcionadorImpressaoOrdemDeProducao').submit();
+	});
+}
+
+function exportar() {
+	window.location = 'exportacao.vendas.php'; return false;
+}
+
+function gerarComprovantes() {
+	if (datatable.validateSelectedItems()) {
+		gerarComprovantesSelecionados();
+	}
+}
+
+function enviarFaturas() {
+	envio = new EnvioFatura();
+	envio.init();
+	return false;
+}
+
+function setIdContatoConsulta(idContato) {
+	$('#idContatoConsulta').val(idContato);
+	$('#pesquisa-mini').focus()
+						.removeClass('warning')
+						.removeClass('ac_error')
+						.addClass('tipsyOff')
+						.removeAttr('title');
+}
+
+function initUploader(tipoIntegracao) {
+	if (tipoIntegracao == '' || tipoIntegracao == undefined) {
+		tipoIntegracao = 'sem_integracao';
+	}
+	var uploader = new qq.FileUploader({
+		element: document.getElementById('file-uploader'),
+		action: 'services/file.general.uploader.php?function=' + tipoIntegracao,
+		multipart: true,
+		params:{
+			//idEmpresa: idEmpresa
+		},
+		labels: {
+			drop: 'Arraste um arquivo aqui para fazer o upload',
+			button: 'Procurar',
+			cancel: 'Cancelar',
+			failed: 'Falhou'
+		},
+		onSubmit: function(id, fileName) {
+		},
+		onComplete: function(id, fileName, responseJSON) {
+			if (responseJSON.result == 1) {
+				$('#file-uploader').hide();
+				$('#spGeracaoParcelasGroupon').show();
+				$('#descricaoUploaderPedidos').hide();
+				$('#importarPedidoArquivo').click(function() {
+					var naoGeraParcelas = '';
+					if ($('#naoGerarParcelas').prop('checked')) {
+						naoGeraParcelas = 'S';
+					}
+					// Adicionado logs em produção para monitora uso;
+					if (responseJSON.tipoIntegracao == 'Groupon') {
+						xajax_importarPedidosGroupon(fileName, naoGeraParcelas);
+						$('#dlgImportacaoPedidosGroupon').dialog('close');
+						displayWait('vendasWait', true, 'Importando pedidos do Groupon, aguarde...');
+					} else if (responseJSON.tipoIntegracao == 'ShopDelivery') {
+						xajax_importarPedidosShopDelivery(fileName);
+						$('#dlgImportacaoPedidosShopDelivery').dialog('close');
+						displayWait('vendasWait', true, 'Importando pedidos do Shop Delivery, aguarde...');
+					} else if (responseJSON.tipoIntegracao == 'UOLShopping') {
+						xajax_importarPedidosUolShopping(fileName);
+						$('#dlgImportacaoPedidosUol').dialog('close');
+						displayWait('vendasWait', true, 'Importando pedidos do UOL Shopping, aguarde...');
+					}
+				});
+				$('#importarPedidoArquivo').show();
+			}
+
+		}, debug: true
+	});
+	closeWait('vendasWait');
+}
+
+function mostrarPopupAgrupamento() {
+	new Boxy.load('templates/form.vendas.agrupamento.php',{
+		title: 'Agrupar impressão por:',
+		modal: true,
+		unloadOnHide: false
+	});
+}
+
+function imprimirDeclaracoesConteudo(idPedido) {
+	displayWait('impressaoWait', true, 'Obtendo dados dos pedidos selecionados, aguarde...');
+	var volumesLogisticos = [];
+	var idsOrigem = [];
+	if (idPedido) {
+		idsOrigem.push(idPedido);
+	} else {
+		idsOrigem = datatable.getSelectedsIds();
+	}
+	if (!idsOrigem.length) {
+		closeWait('impressaoWait');
+		mostrarAviso({ 'msg': 'Os pedidos selecionados não estão vinculados à nenhum serviço logístico.' });
+		return false;
+	}
+	xajax_obterRastreamentosOrigem(idsOrigem, function(idsVolumes) {
+		$.each(idsOrigem, function(i, origem) {
+			$.each(idsVolumes, function(j, volume) {
+				if (origem == volume.idOrigem) {
+					volumesLogisticos.push({'idObjetoPlp': volume.id});
+				}
+			});
+		});
+		if (volumesLogisticos.length > 0) {
+			chooseDeclarationModel(volumesLogisticos);
+		} else {
+			mostrarAviso({ 'msg': 'Não foi possível obter os objetos logísticos dos pedidos selecionados.' });
+		}
+		closeWait('impressaoWait');
+	});
+}
+
+function imprimirComAgrupamento() {
+	var filtros = getSearchFilter();
+		filtros.tituloRelatorio = $('.titulo span:visible').html();
+		filtros.cidade = filtros.idMunicipio;
+		filtros.agrupamento = $('input:radio[name=tipoDeAgrupamento]:checked').val();
+	closePopupAgrupamento();
+	window.open('relatorios/relatorio.vendas.php?' + filter.serialize(filtros) );
+}
+
+function closePopupAgrupamento() {
+	Boxy.get('#form_agrupamento_impressao').hide();
+}
+
+function setPreencherFreteComCotacao(aPreencherFreteComCotacao, aPreencherFreteComCotacao_valorAdicional) {
+	preencherFreteComCotacao = aPreencherFreteComCotacao;
+	preencherFreteComCotacao_valorAdicional = aPreencherFreteComCotacao_valorAdicional;
+	if (preencherFreteComCotacao_valorAdicional.indexOf('%') !== -1) {
+		preencherFreteComCotacao_valorAdicional_tipo = '%';
+		preencherFreteComCotacao_valorAdicional = preencherFreteComCotacao_valorAdicional.replace(/%/g, '');
+	}
+	preencherFreteComCotacao_valorAdicional = nroUsaFloat(preencherFreteComCotacao_valorAdicional);
+}
+
+
+function listar() {
+	var filter = getSearchFilter();
+	xajax_listarVendas(filter, function(response) {
+		datatable.Feed(response);
+		if (response.total !== undefined) {
+			actionBar.setTotal(response.total);
+		}
+		if (response.length) {
+			setarTipoUsuario(response.permissions.vendedor);
+		}
+	});
+}
+
+function getContextMenu() {
+	var context = {
+		permissions: [
+			{
+				menus : ['Imprimir cupom fiscal'],
+				permissions : ['CupomFiscal','!vendasRapidas.emitePreVenda']
+			},
+			{
+				menus: ['Imprimir AR', 'Enviar Rastreio por e-mail', 'Imprimir Etiqueta de Envio', 'Imprimir Declaração de Conteúdo'],
+				permissions: function(data, permissions) {
+					return (permissions.EtiquetaTransporte);
+				}
+			},
+			{
+				menus : ['Imprimir CF-e', 'Cancelar CF-e'],
+				permissions: function(data, permissions) {
+					return permissions.sat.habilitarSat && data.idCfe && data.idCfe > 0;
+				}
+			},
+			{
+				menus: ['Imprimir etiqueta', 'Imprimir carnê', 'Enviar por e-mail', 'Imprimir', 'Imprimir c/ detalhes', 'Imprimir comprovante'],
+				permissions : '!PlanoFaturai'
+			},
+			{
+				menus: ['Estornar estoque', 'Lançar estoque'],
+				permissions : ['estoque', 'VendasLancarEstoque']
+			},
+			{
+				menus: ['Estornar contas', 'Lançar contas'],
+				permissions : ['!PlanoFaturai', 'VendasLancarContas']
+			},
+			{
+				menus:['Gerar nota fiscal', 'Gerar nota serviço', 'Lançar contas', 'Lançar estoque'],
+				permissions:function(data) {
+					return (!data.existeNota && !data.existeNotaServico && getSituacaoPeloId().valor != 2);
+				}
+			},
+			{
+				menus: ['Imprimir AR', 'Enviar rastreio por e-mail'],
+				permissions: function(data) {
+					return (data.etiquetaCorreios && data.etiquetaCorreios.length > 0);
+				}
+			},
+			{
+				menus:['Gerar nota fiscal', 'Gerar NFC-e', 'Gerar nota serviço',
+						'Estornar contas', 'Lançar contas', 'Estornar estoque', 'Lançar estoque',
+						'Imprimir etiqueta', 'Imprimir cupom fiscal', 'Ordem de produção'],
+				permissions: '!vendedor'
+			},
+			{
+				menus:['Gerar SAT'],
+				permissions: 'enviarSatIntegracao'
+			}
+		],
+		menus: [
+		  {
+			'Gerar nota fiscal' : {
+				action: function(data) {
+					window.location = 'notas.fiscais.php?idOrigem=' + data.id;
+				},
+				permissions: 'NotasFiscais',
+				icon: 'bli bling-n-darkred',
+				props: function(data) {
+					return {
+						href: 'notas.fiscais.php?idOrigem=' + data.id
+					};
+				}
+			},
+			'Lançar estoque' : {
+				action: function(data) {
+					displayWait('vendasWait', true, 'Aguarde...');
+					xajax_verificaLancarEstoque(data.id, function(res) {
+						if (res.permissaoErro) {
+							permissaoErro(res.permissaoErro);
+						} else if(res.noItems) {
+							DialogMessage.warning({
+								'alertTitle': 'Lançar estoque',
+								'description': 'Esta venda não possui itens.'
+							});
+						} else if (res.possuiMaisDeUmDeposito) {
+							abrirPopupDepositoEstoques(data.id, res.idDeposito);
+						} else if (res.estoqueNegativoMsg) {
+							DialogMessage.warning({
+								'description': res.estoqueNegativoMsg
+							});
+						} else {
+							listar();
+						}
+						closeWait('vendasWait');
+					});
+				},
+				permissions: ['!data.existeEstoqueOrdemServico','!data.existeEstoqueNotaOrdem', function(data) {
+					return !data.existeEstoque;
+				}],
+				icon: 'bli bling-e-blue'
+			},
+			'Lançar contas' : {
+				action: function(data) {
+					lancarContasVendaTela(data.id);
+				},
+				permissions: function(data) {
+					return !data.existeDuplicatas;
+				},
+				icon: 'bli bling-c-green'
+			},
+			'Estornar estoque' : {
+				action: function(data) {
+					estornarEstoque(data.id);
+				},
+				permissions: function(data) {
+					return data.existeEstoque == 'S';
+				},
+				icon: 'bli bling-e-blue ban'
+			},
+			'Estornar contas' : {
+				action: function(data) {
+					estornarContas(data.id);
+				},
+				permissions: function(data) {
+					return (data.existeDuplicatas == 'S');
+				},
+				icon: 'bli bling-c-green ban'
+			},
+			'Gerar SAT': {
+				action: function(data) {
+					gerarSat(data.id);
+				},
+				permissions: function(data) {
+					return data.situacao == 0;
+				},
+				icon: 'bli bling-cfe-blue'
+			},
+			'Gerar NFC-e' : {
+				action: function(data) {
+					window.location = 'notas.fiscais.nfces.php?idOrigem=' + data.id + '&destino=nfce';
+				},
+				permissions: 'nfce',
+				icon: 'bli bling-n-darkgreen'
+			},
+			'Gerar nota serviço' : {
+				action: function(data) {
+					window.location = 'notas.servico.php#venda/' + data.id
+				},
+				permissions : ['notasServico', '!PlanoFaturai'],
+				icon: 'bli bling-n-deepgreen'
+			},
+			'Gerar ordem serviço' : {
+				action: function(data) {
+					window.location = 'ordem.servicos.php#venda/' + data.id;
+				},
+				permissions: function(data, permissions) {
+					return (permissions.OrdemServico && !data.existeNota && !data.existeNotaServico && !data.existeOrdemServico);
+				},
+				icon: 'bli bling-o-midgreen'
+			},
+			'Limpar avisos' : {
+				action: function(data) {
+					xajax_limparAvisos(data.id, function(result) {
+						listar();
+					});
+				},
+				permissions: function(data, permissions) {
+					return (permissions.limparAvisos && data.markers.hasPendencia) ;
+				},
+				icon: 'fas fa-exclamation-triangle'
+			},
+			'Clonar venda' : {
+		  		action: function(data) {
+		  			editCloneVenda(data.id, 'S');
+		  		},
+		  		icon:'fas fa-clone'
+		  	},
+		  	'Cancelar CF-e' : {
+				action: function(data) {
+					cancelarSatVenda(data.idCfe);
+				},
+				icon:'fas fa-ban'
+			},
+		},
+		{
+			'Imprimir' : {
+				action: function(data) {
+					var params = {
+						'idsVenda': data.id,
+						'detalhado': 'N'
+					};
+					direcionarImpressaoVenda(params, function() {
+						$('#idVenda').val(params.idsVenda);
+						$('#imprimeDetalhado').val(params.detalhado);
+						$('#imprimeOrdem').val($('#options_print_receipt').val());
+						$('#desmembrarEstrutura').val($('#desmembrarEstruturaVenda').is(':checked') ? 'S' : 'N');
+						$('#direcionador').submit();
+					});
+				},
+				icon:'fas fa-print'
+			},
+			'Imprimir comprovante' : {
+				action: function(data) {
+					gerarComprovante(data.id);
+				},
+				icon:'fas fa-print'
+			},
+			'Imprimir c/ detalhes' : {
+				action: function(data) {
+					var params = {
+						'idsVenda': data.id,
+						'detalhado': 'S'
+					};
+					direcionarImpressaoVenda(params, function() {
+						$('#idVenda').val(params.idsVenda);
+						$('#imprimeDetalhado').val(params.detalhado);
+						$('#imprimeOrdem').val($('#options_print_receipt').val());
+						$('#direcionador').submit();
+					});
+				},
+				icon:'fas fa-print'
+			},
+			'Imprimir etiqueta de envio' : {
+				action: function(data) {
+					data.tipoIntegracaoLogistica = data.tipoIntegracaoLogistica || 'Correios';
+					data.idObjetoPlp = data.idObjetoPlp || 0;
+					var integracaoLogistica = LogisticFactory.create(data.tipoIntegracaoLogistica);
+					var impressaoIndividual = (integracaoLogistica.individualLabelPrint() ? 1 : 0);
+					if (parseInt(data.idObjetoPlp) == 0) {
+						displayWait('impressaoWait', true, 'Imprimindo as etiquetas selecionadas, aguarde...');
+						xajax_imprimirRotulo({ 'etiquetas': [{ 'idObjetoPlp': data.idObjetoPlp, 'idOrigem': data.id, 'possuiEtiqueta': 0 }] }, 'etiqueta', impressaoIndividual);
+						return;
+					}
+					var dadosObj = {'etiquetas' : [{'idObjetoPlp' : data.idObjetoPlp, 'possuiEtiqueta' : 1}]};
+					if (integracaoLogistica.externalLabel()) {
+						if (['MercadoEnvios', 'MercadoEnviosFlex', 'MagaluEntregas'].indexOf(data.tipoIntegracaoLogistica) !== -1) {
+							choosePrintFormat(dadosObj);
+						} else {
+							displayWait('impressaoWait', true, 'Imprimindo as etiquetas selecionadas, aguarde...');
+							printWin = window.open('./impressao/etiquetasEnvio.php', '_blank');
+							printWin.onload = function() {
+								xajax_imprimirRotuloExterno(dadosObj, impressaoIndividual);
+							};
+						}
+					} else {
+						displayWait('impressaoWait', true, 'Imprimindo as etiquetas selecionadas, aguarde...');
+						xajax_imprimirRotulo(dadosObj, 'etiqueta', impressaoIndividual);
+					}
+				},
+				icon:'fas fa-print'
+			},
+			'Imprimir declaração de conteúdo' : {
+				action: function(data) {
+					var idPedido;
+					if (parseInt(data.idObjetoPlp) > 0) {
+						idPedido = data.id;
+					}
+					imprimirDeclaracoesConteudo(idPedido);
+				},
+				permissions: function(data) {
+					return (data.idObjetoPlp > 0);
+				},
+				icon:'fas fa-print'
+			},
+			'Imprimir carnê' : {
+				action: function(data) {
+					gerarCarne(data.id);
+				},
+				icon:'fas fa-print'
+			},
+			'Imprimir AR' : {
+				action: function(data) {
+					displayWait('impressaoWait', true, 'Imprimindo os AR\'s selecionados, aguarde...');
+					xajax_imprimirRotulo({'etiquetas' : [{ 'idObjetoPlp' : data.idObjetoPlp, 'possuiEtiqueta' : 1 }]}, 'ar');
+				},
+				icon:'fas fa-print'
+			},
+			'Imprimir etiqueta' : {
+				action: function(data) {
+					imprimirEtiquetaVenda(data.id);
+				},
+				permissions: 'vendas.imprimeEtiqueta',
+				icon:'fas fa-print'
+			},
+			'Imprimir cupom fiscal' : {
+				action: function(data) {
+					abrirTelaCupom(data.id);
+				},
+				icon:'fas fa-print'
+			},
+			'Imprimir CF-e' : {
+				action: function(data) {
+					imprimirSatVenda(data.idCfe);
+				},
+				icon:'fas fa-print'
+			},
+			'Relatório de produção' : {
+				action: function(data) {
+					var params = {
+						'idsVenda': data.id,
+						'ordemProducao': true,
+						'desmembrar': $('#imprimir_estrutura_ordem_producao').val() == 'S'
+					};
+
+					direcionarImpressaoVenda(params, function() {
+						$('#idPedidoVenda').val(params.idsVenda);
+						$('#imprimeOrdemProducao').val($('#options_print_receipt').val());
+						$('#ocultarItensTerceiros').val(($('#ocultar_terceiros').is(':checked') ? 'S' : 'N'));
+						$('#direcionadorImpressaoOrdemDeProducao').submit();
+					});
+				},
+				permissions: 'Producao',
+				icon:'fas fa-print'
+			}
+		},
+		{
+			'Enviar por e-mail' : {
+				action: function(data) {
+					if (data.tipoIntegracao != 'MercadoLivre') {
+						abrirPopupEnvioDocumento(data.id, data.idContato);
+					} else {
+						abrirPopupEnvioMensagemMercadoLivre(data.id, data.idContato);
+					}
+				},
+				icon:'fas fa-paper-plane'
+			},
+			'Enviar rastreio por e-mail' : {
+				action: function(data) {
+					enviarCodigoRastreamentoPorEmail(data.id, data.numeroPedido, data.etiquetaCorreios, data.idContato, data.idMagento, data.idObjetoPlp, data.tipoIntegracao, '');
+				},
+				icon:'fas fa-paper-plane'
+			},
+			' Enviar por whatsapp' : {
+				action: function(data) {
+					xajax_enviarDocumentoWhatsapp(data.id, data.idContato, 'venda', function(response) {
+						if (response.error) {
+							Toast.create({ 'type': Toast.W, 'msg': response.error });
+						} else {
+							whatsApp.create(response.celular, response.url);
+						}
+					});
+				},
+				icon:'fab fa-whatsapp'
+			},
+			'Emitir boletos' : {
+				action: function(data) {
+					gerarBoletos(data.id);
+				},
+				permissions: function(data, permissions) {
+					if (!permissions.Boletos || ((data.existeNota || data.existeNotaServico) && data.existeDuplicatas != 'S')) {
+						return false;
+					}
+					return true;
+				},
+				icon:'fas fa-barcode'
+			},
+			'Receber com Pix': {
+				action: function(data) {
+					receberComPix(data);
+				},
+				permissions: function(data, permissions) {
+					if (!permissions.cobrancaPix || ((data.existeNota || data.existeNotaServico) && data.existeDuplicatas != 'S')) {
+						return false;
+					}
+					return true;
+				},
+				icon: "images/conta-digital/icones-pix/icone_pix.svg"
+			},
+			'Integração PDV' : {
+				action: function(data) {
+					gerarIntegracaoPDV(data.id);
+				},
+				icon:'fas fa-desktop',
+				permissions: function(data, permissions) {
+					return permissions.vendasRapidas.emitePreVenda;
+				}
+			}
+		  },
+		  {
+			'Visualizar fatura' : {
+				action: function(data) {
+					xajax_gerarDocumentoCompartilhado(data.id, 'fatura', data.idContato, function(data) {
+						listar();
+						window.open(data.url);
+					});
+				},
+				permissions:'PainelFatura',
+				icon:'fas fa-eye'
+			}
+		  }
+		]
+	};
+	var situacoesMenu = {};
+	situacoes.forEach(function(situacao) {
+		situacoesMenu[situacao.nome] = {
+			action : function(data) {
+				$('.button-navigate').attr('disabled', true);
+				alterarSituacao(data.id, situacao.id);
+			},
+			permissions: ['VendasGerenciarSituacao', function(data) {
+				if (data.vendedor &&
+					(situacao.valor == 0 || situacao.valor == 1 || situacao.valor == 2 || situacao.valor == 3 || situacao.valor == null)) {
+					return false;
+				}
+				var configuredTransitions = getConfiguredTransitions(data.idSituacao, true);
+				//a situação verificado, que corresponde ao valor 11, não pode ser alterada manualmente
+				if ($.inArray(situacao.id, configuredTransitions) == -1 || situacao.valor == 11) {
+					return false;
+				}
+				return true;
+			}],
+			icon: 'bli bling-arrow-right-midblue'
+		};
+	});
+	context.menus.push(situacoesMenu);
+	return context;
+}
+
+function faturarPedidoServico(venda) {
+	var id = venda.id;
+	var dialog = {
+		config: {
+			title: 'Painel de Fatura',
+			width: 612
+		},
+		content: $('#painel-fatura'),
+		textOk: 'ENVIAR FATURA',
+		idOk: 'enviarFatura',
+		idCancelar: 'cancelarJanela',
+		textCancelar: 'FECHAR',
+		fnOk: function() {
+			iniciarProcessoFatura([id]);
+			return false;
+		},
+		fnCreate: function() {
+			aVendas = [];
+			resetForm();
+			if (!venda.existeNotaServico && !venda.existeDuplicatas && !venda.faturaPelaVenda) {
+				getOpcoesPadrao();
+			}
+			getCurrentStep(id);
+			validarEmissaoNfse([id]);
+			validarEmissaoBoleto([id]);
+		},
+		fnCancelar: function() {
+			listar();
+		},
+		fnBeforeClose: function() {
+			listar();
+		}
+	};
+	createDialog(dialog);
+	$('#painel-fatura').css('display','block');
+	return false;
+}
+
+function faturarEmLote() {
+	var aIds = [];
+	var aNaoIniciadas = [];
+	$.each(datatable.getSelecteds(), function() {
+		if (!this.existeNotaServico && !this.existeDuplicatas && !this.faturaPelaVenda) {
+			aIds.push(this.id);
+		} else {
+			aNaoIniciadas.push(this.numeroPedido);
+		}
+	});
+	if (aNaoIniciadas.length) {
+		Toast.create({
+            type: Toast.W,
+            title: 'Atenção',
+            msg: 'O(s) pedido(s) ' + aNaoIniciadas.toString() + ' já foram inicializado(s) e não poderão ser faturados pelo processo de fatura em lote. Faturas já iniciadas devem ser faturadas de maneira avulsa.',
+            config: {
+                'closeButton': false,
+                'timeOut': 30000
+            }
+        });
+	}
+	if(aIds.length) {
+		var dialog = {
+			config: {
+				title: 'Painel de Fatura em Lote',
+				width: 612
+			},
+			content: $('#painel-fatura'),
+			textOk: 'ENVIAR FATURAS',
+			idOk: 'enviarFatura',
+			idCancelar: 'cancelarJanela',
+			textCancelar: 'FECHAR',
+			fnOk: function() {
+				iniciarProcessoFatura(aIds);
+				return false;
+			},
+			fnCreate: function() {
+				resetForm();
+				getOpcoesPadrao();
+				validarEmissaoNfse(aIds);
+				validarEmissaoBoleto(aIds);
+			},
+			fnCancelar: function() {
+				listar();
+			},
+			fnBeforeClose: function() {
+				listar();
+			}
+		};
+		createDialog(dialog);
+		$('#painel-fatura').css('display','block');
+		return false;
+	}
+}
+
+function abrirPopupEnvioMensagemMercadoLivre(idVenda, idContato) {
+	dialog.dialog({
+		autoOpen: false,
+		title: 'Envio de Mensagem para o Mercado Livre',
+		modal: true,
+		resizable: false,
+		close:function() {
+			$(this).dialog('destroy');
+		},
+		width: 425
+	});
+	dialog.load('templates/form.envio.documento.mercadolivre.popup.php', '', function() {
+		dialog.dialog('open');
+		ajustarFormEnvioMensagemMl(idVenda, idContato);
+	});
+}
+
+function ajustarFormEnvioMensagemMl(idVenda, idContato) {
+	displayWait('pleasewait');
+	initFormMsgFul();
+	xajax_obterDadosContatoMensagemMercadoLivre(idVenda, idContato);
+	$('#nomeDestinatario').focus();
+}
+
+function clearForm() {
+	$('#clone').val('');
+	$('#loja').find('option:disabled').remove();
+	$('#editouContato').val('N');
+	$('#vendaForm :text').val('');
+	$('#gritens > tbody > tr').each(function() {
+		if (($(this).attr('id') != 'itens_header') && ($(this).attr('id') != 'itens')) {
+			$(this).remove();
+		}
+	});
+	$('#avisoMensagem').hide();
+	$('.comissao').hide();
+	$('.bling-tabs > li > a').removeClass('active');
+	$('#activeItens').addClass('active');
+	limparParcelas();
+	$('#divSubtotal').val('0,00');
+	$('#campoTotalQtds').val('0');
+	$('#subtotal').val(0);
+	$('#divTotal').val('0,00');
+	$('#totalIPI').val('0,00');
+	$('#totalICMS').val('0,00');
+	$('#frete').val('0,00');
+	$('#divNumeroItens').val('0');
+	$('#total').val(0);
+	$('#precoLista').val(0);
+	$('#itemNumber').val(-1);
+	$('#idOrigem').val(0);
+	$('#produtoId').val('');
+	$('#divTotalDescontoItens').val('0,00');
+	$('#divTotalDesconto').val('0,00');
+	$('#divTotalComissao').val('0,00');
+	habilitarCampos();
+	limparEstrutura();
+	$('#novoContato').hide();
+	$('#mensagemContato').hide();
+	$('#possuiNumeroProposta').hide();
+	$('#desconto').val('0');
+	$('#outrasDespesas').val('0,00');
+	$('#desconto').removeClass('ac_error');
+	$('#data').val(dataAtual);
+	$('#dataSaida').val(dataAtual);
+	$('#observacaoInterna').val('');
+	$('#detVenda').html('Detalhes da venda');
+	// Limpa campos hidden
+	$('#origemPedidoDaLojaVirtual').val('');
+	$('#origemPedidoCanalDeVenda').val('');
+	$('#numeroPedidoDaLojaVirtual').val('');
+	$('#idTransportador').val(0);
+	$('#produto').removeClass('ac_error');
+	$('#produto').addClass('tipsyOff');
+	$('#produto').removeAttr('title');
+	$('#nomeVendedor').removeClass('ac_error');
+	$('#nomeVendedor').addClass('tipsyOff');
+	$('#nomeVendedor').removeAttr('title');
+	$('#btAlterarSituacaoVenda').removeAttr('disabled');
+	$('#id').val('0');
+	$('#idContato').val('0');
+	$('#idVendedor').val('0');
+	$('.form-warning').removeClass('form-warning');
+	$('#precounitario').removeClass('preco-abaixo');
+	$('.warn-preco-abaixo').hide();
+	$('.warn-desconto-acima').hide();
+	$('#primeiraCompra').val('');
+	$('#tr_obs_cliente').hide();
+	$('#informacoes_correios').html('');
+	$('#div_aviso_termino_etiquetas').html('');
+	$('#idMagento').val('');
+	$('#observacoes').val('');
+	$('#base_comissao').val('0,00');
+	$('#alq_comissao').val('0,00');
+	$('#vlr_comissao').val('0,00');
+	$('#adicionais_base').val('0,00');
+	$('#loja').val('');
+	$('#idConfUnidadeNegocio').html(
+		$('<option>', { 'value': 0, 'selected': true, 'html': 'Nenhuma unidade de negócio'})
+	);
+	$('#usuario').attr('readonly',true);
+	$('#prazoEntrega').val('0');
+	$('#idEnderecoEtiqueta').val(0);
+	$('#etiqueta_nome').val('');
+	$('#etiqueta_endereco').val('');
+	$('#etiqueta_numero').val('');
+	$('#etiqueta_complemento').val('');
+	$('#etiqueta_id_municipio').val(0);
+	$('#etiqueta_municipio').val('');
+	$('#etiqueta_uf').val(' ');
+	$('#etiqueta_cep').val('');
+	$('#etiqueta_bairro').val('');
+	$('#dados_endereco_etiqueta').hide();
+	$('#etiqueta_mostrar').prop('checked', false);
+	$('#nroProposta').val('');
+	$('#pesoBruto').val('0,000');
+	$('#numeroManual').val(0);
+	$('#mensagem').html('').css({'display':'none'});
+	$('#tipoIntegracao').val('');
+	$('#div_pais').hide();
+	clearWarnings();
+	possuirEstLancado = false;
+	podeAlterarLojaAviso = true;
+	setExisteEstoqueInfo(0);
+	clearFormLogistica();
+	contato.campoContatoRapido.warningObs.remover();
+	produtosCotacao = [];
+	errorOccuredOnSave = false;
+	setarAcrescimoDesconto(0);
+	try {
+		endTour();
+	}catch(error) {}
+}
+
+function setarEstoqueLancado() {
+	possuirEstLancado = true;
+}
+
+function limparEstrutura() {
+	estruturaDosProdutos = {};
+	itemClicado = false;
+	itemTemp = {};
+	idItemEdicaoTemp = '0';
+	itemEdicaoTemp = null;
+}
+
+function incluirVenda() {
+	$.history.add('add');
+	clearForm();
+	$.when(
+		carregarLojasIntegradas(),
+		carregarListasPrecos()
+	).done(function() {
+		xajax_incluirVenda(function(response) {
+			$('#numeroPedido').val(response.numeroPedido);
+			$('#qtdVolumes').val(response.qtdVolumes || '');
+			$('#podeIncluirProdutos').val(response.podeIncluirProdutos || '');
+			$('#podeVisualizarEstoqueNaVenda').val(response.podeVisualizarEstoqueNaVenda || '');
+			setarCategoria(response.categoriaPadrao);
+			$('#observacoes').val(response.observacoes);
+			$('#parametro_adicionais_comissao').val(response.parametro_adicionais_comissao);
+			$('#fretePorConta').val(response.fretePorConta);
+			mostrarEtiquetasCarregadas(response.dadosEtiquetas);
+			if (response.ocultarFramePagamento) {
+				$('.frame-pagamento').hide();
+				$('#msg_config_gateway').show();
+			}
+			$('#data, #dataSaida').val(response.dataAtual);
+		});
+		$('#itens').show();
+		$('#parcelas_header').hide();
+		$('#trh').hide();
+		displayForm();
+		$('#observacoes').val(observacoes);
+		$('#contato').focus();
+		podeAlterarLojaAviso = true;
+		try {
+			endTour();
+		} catch(error) {}
+	});
+}
+
+function abrirTelaCupom(idVenda) {
+	if (!appletCupomCarregado && appAcessoHardware == 'applet') {
+		$('#applet_cupom').html('<applet code="CupomFiscal.class" name="CupomFiscal" width="0" height="0" archive="applets/nfe-13.0.jar" MAYSCRIPT></applet>');
+		appletCupomCarregado = true;
+	}
+	new Boxy.load('templates/form.cupom.fiscal.php?idOrigem=' + idVenda + '&tipo=V', {
+		title: 'Emissão de Cupom Fiscal',
+		modal: true,
+		afterShow: ajustarFormCupomFiscal
+	});
+}
+
+function ajustarFormCupomFiscal() {
+	$(document).ready(function() {
+		initCupom();
+	});
+}
+
+function obterDisponibilidadeVendaCertificado() {
+	$(document).ready(function() {
+		xajax_obterDisponibilidadeCertificado(function(dataResponse) {
+			if (dataResponse.estoque <= 0) {
+				$('#aba_compras').hide();
+			}
+		});
+	});
+}
+
+function buscarPedidoArquivo() {
+	nomeArquivo = '';
+	new Boxy.load('templates/form.pedido.venda.arquivo.popup.php', {
+		title: 'Integração por arquivo da CRNET ',
+		modal: true,
+		afterShow: ajustarFormPedidoArquivoCrnet
+	});
+}
+
+function ajustarFormPedidoArquivoCrnet() {
+	habilitarBotaoLeituraCrnet();
+	$('#arquivo').val('');
+	$('#arquivo').focus();
+	$('.qq-upload-button').show();
+	$('#btnImportCrNet').hide();
+	paramsFp = {
+		'elemento': document.getElementById('file-uploader'),
+		'acao': 'uploadPedidoXML.php?idEmpresa=' + idEmpresa,
+		'extensoes': ['txt'],
+		'callback': liberarProcessarArquivoCrnet
+	};
+	initFileUploader(paramsFp);
+}
+
+function liberarProcessarArquivoCrnet(response) {
+	nomeArquivo = response.tmp;
+	$('#mensagemCrNet').html('');
+	$('#mensagemCrNet').removeClass('warning')
+					   .addClass('nomessage');
+	$('#btnImportCrNet').removeAttr('disabled')
+						.show();
+	$('.qq-upload-button').hide();
+}
+
+function habilitarBotaoLeituraCrnet() {
+	$('#btnImportCrNet').removeAttr('disabled');
+	$('#uploadEfetuado').val('N');
+}
+
+function buscarPedidoXML() {
+	nomeArquivo = '';
+	new Boxy.load('templates/form.pedido.venda.xml.popup.php', {
+		title: 'Integração por Arquivo XML',
+		modal: true,
+		afterShow: ajustarFormPedidoXML
+	});
+}
+
+function ajustarFormPedidoXML() {
+	habilitarBotaoLeitura();
+	$('#arquivo').val('').focus();
+	$('.qq-upload-button').show();
+	$('#btnImportXML').hide();
+	paramsFp = {
+		'elemento': document.getElementById('file-uploader'),
+		'acao': 'uploadPedidoXML.php?idEmpresa=' + idEmpresa,
+		'extensoes': ['xml'],
+		'callback': liberarProcessarXML
+	};
+	initFileUploader(paramsFp);
+}
+
+function liberarProcessarXML(response) {
+	nomeArquivo = response.tmp;
+	$('#logLerPedidoXML').html('');
+	$('#logLerPedidoXML').removeClass('warn').addClass('nomessage');
+	$('#btnImportXML').removeAttr('disabled').show();
+	$('.qq-upload-button').hide();
+}
+
+function closePopup() {
+	Boxy.get('#formPedidoXML').hide();
+	habilitarBotaoLeitura();
+}
+
+function habilitarBotaoLeitura() {
+	$('#btnImportXML').removeAttr('disabled');
+	$('#uploadEfetuado').val('N');
+}
+
+function setIdPsqProduto(idPsqProduto) {
+	$('#idPsqProduto').val(idPsqProduto);
+}
+
+function testarIdPsqProduto() {
+	if(($('#idPsqProduto').val() > 0)) {
+		listar();
+	} else {
+		if (($('#nomePsqProduto').val() == '') && ($('#idPsqProduto').val() == '0')) {
+			listar();
+		} else {
+			$('#datatable').html([
+				'<br/>',
+				$('<div>', { class:'box-aviso'}).append(
+					$('<h3>',{ text:'Ainda não existem pedidos de vendas cadastrados no seu sistema.'}),
+					'<p>Você pode começar incluindo um agora mesmo, clicando no botão de incluir pedido.</p>',
+					'<p>Os pedidos de venda servem como registro de suas vendas e podem ser usados para agilizar a emissão de notas fiscais..</p>'
+				)
+			]);
+		}
+	}
+}
+
+function limparCodigoProdutoPsq(event, idCampo) {
+	idCampo = idCampo | 'idPsqProduto';
+	if ((event.keyCode <= 8) ||
+		((event.keyCode >= 46) && (event.keyCode <= 111)) ||
+		(event.keyCode >= 186)
+	) {
+		$('#' + idCampo).val('0');
+	}
+}
+
+function gerarBoletos(id) {
+	xajax_verificaConfiguracaoDaContaPadrao(id);
+    newTab = window.open('', '_blank');
+}
+
+function receberComPix(data) {
+	lancarContasVendaTela(data.id, function(response) {
+		if (response.code == 0) {
+			abrirPopupReceberComPix(data, 2);
+		}
+	});
+}
+
+function contaConfigurada(id) {
+    lancarContasVendaTela(id, function(data) {
+    	if (data.code == 0) {
+        	newTab.location = 'gerar.boleto.php?idOrigem='+id;
+    	} else {
+    		newTab.close();
+    	}
+    });
+}
+
+function lancarContasVendaTela(id, callback) {
+	displayWait('vendasWait', true, 'Lançando conta, aguarde...');
+	xajax_lancarContasVendaTela(id, function(data) {
+		if (data.code > 0) {
+			DialogMessage.error({ alertTitle: 'Não foi possível lançar contas e comissões.', description: 'Motivo: ' + data.msg });
+		}
+		if (callback) {
+			callback(data);
+		}
+		closeWait('vendasWait', true, 'Lançando conta, aguarde...');
+		listar();
+	});
+}
+
+function contaNaoConfigurada() {
+	newTab.close();
+	dialogContaNaoConfigurada();
+}
+
+function abrirPopupDepositoEstoques(idOrigem, idDeposito) {
+	idDeposito = parseInt(idDeposito);
+	createDialog({
+		htmlTitle: 'Depósitos',
+		content: $('<div>', {'id': 'popup_deposito_estoque'}).append(
+			$('<div>', {'class': 'col-xs-12 group-item-form'}).append(
+				$('<label>', {'for': 'idDeposito', 'class': 'label-item-form'}).text('Selecione o depósito'),
+				$('<div>', {'id': 'opcoesDepositos'})
+			)
+		),
+		textOk: 'Lançar',
+		width: 440,
+		fnCreate: function() {
+			xajax_obterOpcoesDepositos('idDeposito', '', 'N', idDeposito);
+		},
+		fnOk: function() {
+			$.when(lancarEstoques(idOrigem, $('#idDeposito').val())).done(function() {
+				closeWait('vendasWait');
+			});
+		}
+	});
+}
+
+//OCORRENCIAS
+function abrirPopupOcorrencia(idOrigem) {
+	$.get('templates/form.ocorrencias.popup.php?idOrigem='+ idOrigem, function() {})
+	.fail(function() {
+		var dialog = {
+			htmlTitle: 'Ocorrências',
+			width: 964,
+			content: '<div>Não foi possível carregar as informações.</div>',
+			idOk: 'btnOk',
+			textCancelar: 'Fechar',
+			fnCreate: function() {
+				$('#btnOk').remove();
+			}
+		};
+		createDialog(dialog);
+	})
+	.done(function(data) {
+		var dialog = {
+			htmlTitle: 'Ocorrências',
+			width: 964,
+			content: '<div>' + data + '</div>',
+			idOk: 'btnOk',
+			textCancelar: 'Fechar',
+			fnCreate: function() {
+				$.each(situacoes, function(index, situacao) {
+					$('#situacao').append(
+						$('<option>', {'value': situacao.id, 'text': situacao.nome})
+					);
+				});
+				$('#btnOk').remove();
+				xajax_listarOcorrenciasDaVenda($('#idOrigemPopup').val(), function(res) {
+					$('#usuario').val(res.nomeUsuario);
+					montarGridOcorrencias(res.ocorrencias, res.gerenciarSituacaoPermissao, res.venda['idSituacao']);
+					$('#dataOcorrencia').focus();
+				});
+			}
+		};
+		createDialog(dialog);
+	});
+}
+
+function adicionarOcorrencia() {
+	$('#btAlterarSituacaoVenda').attr('disabled','disabled');
+	var idOrigem = $('#idOrigemPopup').val();
+	if (idOrigem == undefined || idOrigem == 'undefined') {
+		alert('Venda não localizada.');
+		return;
+	}
+	displayWait('waitPopup', true, 'Alterando situação, aguarde...');
+	var data = {
+		id : $('#idOrigemPopup').val(),
+		idSituacao: $('#situacao').val()
+	};
+	var paramsOcorrencia = {
+		'idOrigem': $('#idOrigemPopup').val(),
+		'data': $('#dataOcorrencia').val(),
+		'hora': $('#horaOcorrencia').val(),
+		'ocorrencia': $('#ocorrencia').val(),
+		'situacao': getSituacaoPeloId($('#situacao').val()),
+		'enviarEmail': $('#enviarEmail').val(),
+		'assunto': $('#assunto').val(),
+		'mensagem': $('#mensagemDeEnvio').val(),
+		'enviarEmailVendedor': $('#enviarEmailVendedor').val()
+	}
+	xajax_adicionarOcorrenciaVenda(paramsOcorrencia, function(res) {
+		if (res.permissionDenied) {
+			permissaoErro(res.permissionDenied);
+		} else if(res.errors) {
+			reportErrorFsm(res.errors);
+		} else {
+			if(res.msgAviso) {
+				mostrarAvisos(res.msgAviso, 'warning', 'Alteração da Situação da venda');
+			}
+			$('#ocorrencia').val('');
+			montarGridOcorrencias(res.ocorrencias, true, paramsOcorrencia['situacao']['id']);
+			$('#data').focus();
+		}
+		closeWait('waitPopup');
+		listar();
+		clearForm();
+		datatable.resetSelecteds();
+		datatable.updateData(data);
+	});
+}
+
+function montarGridOcorrencias(aOcorrencias, permissaoSituacao, situacaoAtual) {
+	permissaoSituacao = permissaoSituacao || false;
+	$('#tabOcorrencias > tbody > tr').each(function() {
+		if (($(this).attr('id') != 'tr_oco_label') && ($(this).attr('id') != 'tr_oco_header')) {
+			$(this).remove();
+		}
+		if (!permissaoSituacao) {
+			$('#tdSalvarOcorrencia').remove();
+		}
+	});
+	var configuredTransitions = getConfiguredTransitions(situacaoAtual, true);
+	$('#situacao option').show();
+	$.each(situacoes, function(index, situacao) {
+		//a situação verificado, que corresponde ao valor 11, não pode ser alterada manualmente
+		if (($.inArray(situacao.id, configuredTransitions) == -1 && situacao.id != situacaoAtual) || situacao.valor == 11) {
+			$('#situacao option[value=' + situacao.id + ']').hide();
+		}
+	});
+	$('#situacao').val(situacaoAtual);
+	var tdAcao = [];
+	$.each(aOcorrencias, function(id, item) {
+		tdAcao.push(
+			$('<tr>').append(
+				$('<td>', { style:'padding-left: 2px;', text: item.data }),
+				$('<td>', { style:'padding-left: 2px;', text: item.hora }),
+				$('<td>', { style:'padding-left: 4px;', text:item.ocorrencia }),
+				$('<td>', { style:'padding-left: 4px;', text: item.usuario }),
+				$('<td>', { align:'center', text: item.situacao.nome }),
+				function() {
+					if (!permissaoSituacao) {
+						return '';
+					}
+					return  $('<td>').append(
+								$('<a>', { title:'Remover ocorrência', class:'tableIcon', onclick:'removeDetailOcorrencia(\'' + item.id + '\', $(this).parent().parent())' }).append(
+									$('<i>', { class:'icon-trash' })
+								)
+							);
+				}()
+			)
+		);
+	});
+	$('#tabOcorrencias tbody').append(tdAcao);
+}
+
+function removeDetailOcorrencia(idOcorrencia, obj) {
+	if (confirm('Confirma exclusão da ocorrência?')) {
+		displayWait('waitPopup');
+		xajax_removeDetailOcorrencia(idOcorrencia, function(res) {
+			if (!res.success) {
+				permissaoErro(res.error);
+			}
+			closeWait('waitPopup');
+		});
+		obj.remove();
+	}
+}
+
+function getDescSituacao(idSituacao) {
+	var nomeSituacao = '';
+	$.each(situacoes, function(index, situacao) {
+		if (situacao.id == idSituacao) {
+			nomeSituacao = situacao.nome;
+			return false;
+		}
+	});
+	return nomeSituacao;
+}
+
+function gerarIntegracaoPDV(idV) {
+	if (!appletCupomCarregado && appAcessoHardware == 'applet') {
+		$('#applet_cupom').html('<applet code="CupomFiscal.class" name="CupomFiscal" width="0" height="0" archive="applets/nfe-13.0.jar" MAYSCRIPT></applet>');
+		appletCupomCarregado = true;
+	}
+	xajax_geraTxtIntegracao(idV);
+}
+
+function gerarArquivoPreVenda(conteudo, path) {
+	var jc = new JavaConnection(appAcessoHardware, 'CupomFiscal').getInstance();
+	var parameters = [{'conteudo': conteudo,'pathEnt': path}];
+	jc.writeToFile(parameters, function(err, data) {
+		if(err) {
+			alert('Não foi possível salvar arquivo da pré-venda.');
+		}
+	});
+}
+
+function lerArquivosRetornoECF() {
+	if (!appletCupomCarregado && appAcessoHardware == 'applet') {
+		$('#applet_cupom').html('<applet code="CupomFiscal.class" name="CupomFiscal" width="0" height="0" archive="applets/nfe-13.0.jar" MAYSCRIPT></applet>');
+		appletCupomCarregado = true;
+	}
+	var jc = new JavaConnection(appAcessoHardware, 'CupomFiscal').getInstance();
+	var parameters = [{'pathSai': $('#path_arquivo_sai').val()}];
+	jc.readResultDirectory(parameters, function(err, data) {
+		if(!err) {
+			data = data.split('\r\n');
+			xajax_salvarInfGeradasPDV(data);
+		}
+	});
+}
+
+function exportarContatosSIGEPWeb() {
+	if (datatable.validateSelectedItems()) {
+		DialogMessage.question({
+			'description': 'Confirma exportação do(s) contato(s) da(s) venda(s) selecionada(s)?',
+			'fnOk': function() {
+				xajax_exportarContatosSIGEPWeb(datatable.getSelectedsIds());
+			}
+		});
+	}
+}
+
+function exportarEnderecosPlanilha() {
+	if (datatable.validateSelectedItems()) {
+		DialogMessage.question({
+			'description': 'Confirma exportação do(s) contato(s) da(s) venda(s) selecionada(s)?',
+			'fnOk': function() {
+				xajax_iniciarExportarEnderecosPlanilha(datatable.getSelectedsIds());
+			}
+		});
+	}
+}
+
+
+function mudarSituacaoVendas() {
+	var criterioSituacao = '';
+	var idsSelecionados = datatable.getSelectedsIds();
+	if (typeof $('input[name=situacao]:checked').val() != 'undefined') {
+		criterioSituacao = $('#situacoes_vendas input[name=situacao]:checked').val();
+	}
+	var errorMsg = '';
+	if (criterioSituacao == '') {
+		errorMsg = 'Nenhuma situação foi selecionada.<br/>Por favor, selecione uma situação para a realização de alteração de situação em lote para os pedidos selecionados.';
+	}
+	if (!idsSelecionados.length) {
+		errorMsg = 'Nenhum pedido de venda foi selecionado para mudança de situação.';
+	}
+	if (errorMsg == '') {
+		displayWait('vendasWait', true, 'Alterando situaç' + (idsSelecionados.length > 1 ? 'ões' : 'ão') + ', aguarde...');
+		xajax_mudarSituacaoVendasSelecionadas(idsSelecionados, getSituacaoPeloId(criterioSituacao), $('#ocorrencia_texto').val(), function(res) {
+			if (res.permissionDenied) {
+				$('#form_alteracao_situacao_pedidos_selecionados').dialog('close');
+				clearForm()
+				permissaoErro(res.permissionDenied)
+			} else if(res.errors) {
+				reportErrorFsm(res.errors);
+			}
+			datatable.resetSelecteds();
+			closeWait('vendasWait');
+			clearForm();
+			listar();
+		});
+	} else {
+		DialogMessage.warning({
+			'htmlTitle': 'Atualização situação vendas',
+			'description': errorMsg
+		});
+	}
+}
+
+function alterarSituacao(idVenda, situacao) {
+	novaSituacao = getDescSituacao(situacao);
+	idSituacao = situacao;
+	idDaVenda = idVenda;
+	$.get('templates/form.venda.situacao.popup.php?idVenda=' + idVenda + '&situacao=' + situacao + '&descricaoSituacao=' + novaSituacao)
+		.done(function(dataContent) {
+			createDialog({
+				'content': $('<div>').append(
+					dataContent
+				),
+				'htmlTitle': 'Situação da venda',
+				'fnCreate': function() {
+					$('#p_alterando_situacao').html('Alterando situação para <b>' + novaSituacao + '</b>');
+					$('#situacao').val(idSituacao);
+					$('#enviarRastreamentoMagentoIndividual').prop('checked', true);
+					$('#ocorrencia').focus();
+				},
+				'fnOk': function() {
+					adicionarOcorrencia();
+				}
+			});
+		})
+		.fail(function() {
+			alert('Não foi possível completar a requisição. Entre em contato com o suporte.');
+		});
+}
+
+function ajustarFormVendaSituacao() {
+	$('#p_alterando_situacao').html('Alterando situação para <b>' + novaSituacao + '</b>');
+	$('#situacao').val(idSituacao);
+	$('#enviarRastreamentoMagentoIndividual').prop('checked', true);
+	$('#ocorrencia').focus();
+}
+
+function exibirOcultarCamposEnvioEmail() {
+	if ($('#enviarEmail').prop('checked') || $('#enviarEmailVendedor').prop('checked')) {
+		$('#exibeCamposEnvioEmail').show();
+	} else {
+		$('#exibeCamposEnvioEmail').hide();
+	}
+	if ($('#enviarEmail').prop('checked')) {
+		$('#enviarEmail').val('S');
+	} else {
+		$('#enviarEmail').val('N');
+	}
+	if ($('#enviarEmailVendedor').prop('checked')) {
+		$('#enviarEmailVendedor').val('S');
+	} else {
+		$('#enviarEmailVendedor').val('N');
+	}
+}
+
+function gerarNotasFiscaisSelecionadas(pedidos, tipoNota) {
+	if(jQuery.isEmptyObject(pedidos)) {
+		return alert('Nenhum pedido selecionado!');
+	}
+	displayWait('vendasWait', true, 'Gerando notas fiscais dos pedidos selecionados, aguarde...');
+	gerarNotasLote(pedidos, tipoNota, {}, 1, 20, function(requestErrorMsg, retorno) {
+		if (requestErrorMsg) {
+			showDialogMessage({
+				description: requestErrorMsg,
+				status: 'warning',
+				htmlTitle: 'Erro de geração'
+			});
+		} else if(!jQuery.isEmptyObject(retorno)) {
+			if(!jQuery.isEmptyObject(retorno.nroPedidosErro)) {
+				var msg = 'Houve um erro na geração ' + (jQuery.isEmptyObject(retorno.idsNotas) ? 'das' : 'de algumas') + ' notas fiscais do(s) seguinte(s) pedido(s) de venda:';
+				var dialogErro = {
+					config: {
+						'width': 400
+					},
+					htmlTitle: 'Erro de geração',
+					content: $('<div>'),
+					textOk: 'Tentar novamente',
+					hideCancel: true,
+					fnOk: function() {
+						var pedidos = [];
+						$('#lista_erro_geracao tr[data-id]').each(function() {
+							pedidos.push($(this).attr('data-id'));
+						});
+						gerarNotasFiscaisSelecionadas(pedidos, tipoNota);
+					}
+				};
+
+				$(dialogErro.content)
+					.append($('<span>', { 'text': msg})).append($('<br><br>'))
+					.append($('<div>', { 'css': { 'max-height': '200px', 'min-height': '120px'}})
+						.append($('<table>', { 'id': 'lista_erro_geracao', class: 'datatable'})
+							.append(
+								$('<tr>').append($('<th>', { 'text': 'Número'}), $('<th>', { 'text': 'Motivo'}))
+							)
+							.append(function() {
+								var trs = [];
+								$.each(retorno.nroPedidosErro, function(id, pedido) {
+									trs.push($('<tr>', { 'data-id': id }).append(
+										$('<td>').append($('<a>', { 'target': '_blank', 'href': 'vendas.php#edit/' + id, 'text': pedido.numeroPedido })),
+										$('<td>', { 'text': pedido.msg})
+									));
+								});
+								return trs;
+							}
+						))
+					);
+				createDialog(dialogErro);
+				listar();
+			} else {
+				if(tipoNota == 'S') {
+					window.location = 'notas.fiscais.php';
+				} else {
+					window.location = 'nfces.php';
+				}
+			}
+		}
+		closeWait('vendasWait');
+	});
+}
+
+function gerarNotasLote(pedidos, tipoNota, retorno, offset, size, callback) {
+	var ids = pedidos.slice(offset * size - size, offset * size);
+	if (jQuery.isEmptyObject(ids)) {
+		return callback(null, retorno);
+	}
+	$.post('gerar.notas.lote.php', { ids: ids, tipo: tipoNota }, function(data, status) {
+		if (status != 'success') {
+			return callback('A requisição não foi concluída corretamente. Verifique sua conexão.');
+		}
+		try {
+			retorno = $.extend(true, retorno, JSON.parse(data));
+		} catch(e) {
+			return callback('Não foi possível processar o retorno do servidor. Entre em contato com nosso suporte informando os dados abaixo.<br /><a onclick="$(\'#detalhe_geracao\').slideToggle()">Exibir detalhes</a><div id="detalhe_geracao" style="display:none;">' + data + '</div>');
+		}
+		gerarNotasLote(pedidos, tipoNota, retorno, offset + 1, size, callback);
+	}).fail(function(response) {
+		callback('Houve um erro na requisição.');
+	});
+}
+
+function gerarComprovantesSelecionados() {
+	displayWait('pleasewait', true);
+	var idsSelecionados = datatable.getSelectedsIds({'asString': true});
+	if (idsSelecionados != '') {
+		gerarComprovante(idsSelecionados);
+	} else {
+		closeWait('pleasewait');
+		alert('Nenhum pedido selecionado!');
+	}
+}
+function adicionarEventosFiltroLojas() {
+	$('select#lojasVinculadas').change(function () {
+		idConfUnidadeNegocio = 0;
+		filtroLojas	= $(this).val();
+
+		var type = $('select#lojasVinculadas option:selected').attr('tipointegracao');
+
+		if (jQuery.inArray(type , permiteSincronizacao) != '-1') {
+			$('#sync-virtualStore').css('display','block');
+		} else {
+			$('#sync-virtualStore').css('display','none');
+		}
+
+		if (filtroLojas == 'todas' || filtroLojas == '0') {
+			document.getElementById('unidadesNegocio').style.display = 'none';
+		} else {
+			document.getElementById('unidadesNegocio').style.display = 'block';
+			listarUnidadesDeNegocio(filtroLojas, 0, 'unidadesNegocioSelect', true);
+		}
+		return false;
+	});
+}
+
+function listarVendasUnidadeNegocio(idConf) {
+	idConfUnidadeNegocio = idConf;
+	listar();
+}
+
+function getOrderTray(idIntegracao, numero) {
+	clearForm();
+	displayForm();
+	displayWait('pleasewait', true, 'Carregando pedido da tray. aguarde...');
+	xajax_importSelectedOrderTray(idIntegracao, numero);
+}
+
+function getOrderByForm(params) {
+	clearForm();
+	displayForm();
+	displayWait('pleasewait');
+	xajax_importOrderByForm(params);
+}
+
+function sendDataShopStore() {
+	if (!datatable.validateSelectedItems()) {
+		return;
+	}
+	var pedidos = [];
+	$.each(datatable.getSelecteds(), function() {
+		pedidos.push({
+			cliente: parseFloat(this.idContato),
+			idVenda: parseFloat(this.id),
+			numeroVenda: parseFloat(this.numeroPedido),
+			numeroPedido: parseFloat(this.numeroPedido),
+			codigoRastreamento: this.etiquetaCorreios === undefined ? "" : this.etiquetaCorreios,
+			codigoRastreio: this.etiquetaCorreios === undefined ? "" : this.etiquetaCorreios,
+			numeroLojaVirtual: this.idMagento,
+			idMagento: this.idMagento,
+			tipoIntegracao: this.tipoIntegracao,
+			idLoja: this.loja,
+			urlRastreamento: this.urlRastreamento || '',
+			origemLogistica: this.id || 0
+		});
+	});
+	if (!$.isEmptyObject(pedidos)) {
+		$('#dialogSendData').dialog({
+			modal: true,
+			resizable: false,
+			width: 450,
+			title: 'Envio de dados - Loja virtual',
+			buttons: {
+				Sim: function() {
+					aParamOrders = {
+						loja: $('select#listaLojasAtivasGeneral option:selected').attr('idLoja'),
+						idIntegracao: $('#listaLojasAtivasGeneral').val(),
+						integrationType: $('select#listaLojasAtivasGeneral option:selected').attr('tipointegracao')
+					};
+					aParamData = {
+						tipoCadastro: 'P',
+						enviarNumeroVenda: $('#enviar_numero_venda_loja_virtual').val(),
+						enviarRastreamento: $('#enviar_rastreamento_loja_virtual').val(),
+						enviarPedidoLoja: $('#enviar_pedido_loja_virtual').val(),
+						enviarStatusLoja: $('#enviar_status_loja_virtual').val(),
+						enviarNFe: $('select#enviar_nfe_loja_virtual option:selected').val()
+					};
+
+					if (aParamOrders.loja == undefined) {
+						alert('Por favor, selecione a loja virtual que deseja utiliza para esta operação.');
+					} else {
+						displayWait('vendasWait', true, 'Enviando informações para a loja virtual, aguarde...');
+						xajax_enviarDadosLojaVirtual(pedidos, aParamOrders, aParamData);
+						$(this).dialog('close');
+					}
+				},
+				Não: function() {
+					$(this).dialog('close');
+				}
+			},
+			create: function() {
+				xajax_listarLojasVirtuaisAtivas(null, 'listaLojasAtivasGeneral', 'Selecione');
+				$(this).closest('.ui-dialog').find('.ui-button').eq(1).addClass('button-default');
+				$(this).closest('.ui-dialog').find('.ui-button').eq(1).css('min-width', '45px').css('height', '26px');
+				$(this).closest('.ui-dialog').find('.ui-button').eq(2).addClass('button-default');
+				$(this).closest('.ui-dialog').find('.ui-button').eq(2).css('min-width', '45px').css('height', '26px');
+			},
+			close: function() {
+				$(this).dialog('destroy');
+			}
+		});
+	} else {
+		$('<div>', { style: 'text-align:left;' }).append(
+			'<p>Atenção: É necessário selecionar o(s) pedidos, para envio das informações para a loja virtual.</p>'
+		).dialog({
+			modal: true,
+			resizable: false,
+			width: 325,
+			title: 'Envio de dados - Loja virtual',
+			buttons: {
+				Ok: function() {
+					$(this).dialog('destroy');
+				}
+			},
+			create: function() {
+				$(this).closest('.ui-dialog').find('.ui-button').eq(1).addClass('button-default')
+																	  .css('min-width', '45px').css('height', '26px');
+			},
+			close: function() {
+				$(this).dialog('destroy');
+			}
+		});
+	}
+}
+
+function setarTipoIntegracaoModal() {
+	var type = $('select#listaLojasAtivasGeneral option:selected').attr('tipointegracao');
+	$('#tipoIntegraçãoHidden').val(type);
+	if (jQuery.inArray(type , filtroEnviarDadosLojaVirtual) != '-1') {
+		$('#infoWarn').css('height', 'auto').css('margin-top', 160).css('padding-top', 15);
+		$('#infoWarnML').css('display', 'none');
+		if (jQuery.inArray(type , filtroRastreamentoLojaVirtual) != '-1') {
+			$('#sp_enviar_rastreamento_loja_virtual').css('display','block');
+		} else {
+			$('#sp_enviar_rastreamento_loja_virtual').css('display','none');
+		}
+		if (jQuery.inArray(type , filtroEnviarNFe) != '-1') {
+			$('#sp_enviar_nfe_loja_virtual').css('display','block');
+		} else {
+			$('#sp_enviar_nfe_loja_virtual').css('display','none');
+		}
+		if (jQuery.inArray(type , filtroStatusLoja) != '-1') {
+			xajax_buscaStatusLoja(type, function(response) {
+				montarStatusLoja(JSON.parse(response.status));
+			});
+			$('#sp_enviar_status_loja_virtual').css('display','block');
+		} else {
+			$('#sp_enviar_status_loja_virtual').css('display','none');
+		}
+		if (jQuery.inArray(type , filtroNumeroVendaLojaVirtual) != '-1') {
+			$('#sp_enviar_numero_venda_loja_virtual').css('display','block');
+		} else {
+			$('#sp_enviar_numero_venda_loja_virtual').css('display','none');
+		}
+		if (jQuery.inArray(type , filtroEnviarPedidoLojaVirtual) != '-1') {
+			$('#sp_enviar_pedido_loja_virtual').css('display','block');
+		} else {
+			$('#sp_enviar_pedido_loja_virtual').css('display','none');
+		}
+		if(type == 'MercadoLivre'){
+			var idLoja = $('select#listaLojasAtivasGeneral option:selected').attr('idLoja');
+			xajax_opcoesEnvioDadosMlOld(idLoja);
+		}
+	} else {
+		$('<div>',{ style:'text-align:left;'}).append(
+			'<p>Atenção: Este recurso está indisponível para a plataforma virtual '+type+'.</p>'
+		).dialog({
+			resizable: false,
+			width: 325,
+			modal: true,
+			title: 'Envio de dados - Loja virtual',
+			buttons: {
+				'Ok': function() {
+					$(this).dialog('destroy');
+				}
+			},
+			create:function() {
+				$(this).closest('.ui-dialog').find('.ui-button').eq(1).addClass('button-default')
+																	  .css('min-width', '45px').css('height', '26px');
+			},
+			close:function() {
+				$(this).dialog('destroy');
+			}
+		});
+	}
+}
+
+function opcoesEnvioMl(obj){
+	if(obj.utilizaMe1 && obj.status != '') {
+
+		$('#sp_enviar_status_loja_virtual').change(function(){
+			var type = $('select#listaLojasAtivasGeneral option:selected').attr('tipointegracao');
+			if($("#sp_enviar_status_loja_virtual option:selected").val() != 'false' && type == 'MercadoLivre') {
+				$('#infoWarnML').css('height', 'auto').css('padding-top', 15).css('margin-top', '160px')
+					.css('display', 'block');
+				$('#infoWarn').css('margin-top', '20px');
+			}else{
+				$('#infoWarnML').css('display', 'none');
+				$('#infoWarn').css('margin-top', '160px');
+			}
+		});
+
+		obj.status = JSON.parse(obj.status);
+		montarStatusLoja(obj.status);
+		$('#sp_enviar_status_loja_virtual').css('display', 'block');
+		$('#sp_enviar_rastreamento_loja_virtual').css('display','block');
+	}
+}
+
+function montarStatusLoja(obj) {
+	if (!Object.keys(obj)) {
+		return;
+	}
+	$('#enviar_status_loja_virtual').html('')
+		.append($('<option>', {
+			value: false,
+			text: 'Não'
+		}));
+	$.each(obj, function(id, atributo) {
+		$('#enviar_status_loja_virtual').append($('<option>', {
+			value: id,
+			text: (typeof atributo == 'object' ? atributo.descricao : atributo)
+		}));
+	});
+}
+
+function mostraOcultaAvisosVenda() {
+	var isVisible = $( '#avisos' ).is( ':visible' );
+	if (isVisible) {
+		$('#avisos').hide(500);
+		$('#ocultaMostraAvisos').html('Mostrar');
+	} else {
+		$('#avisos').show(500);
+		$('#ocultaMostraAvisos').html('Ocultar');
+	}
+}
+
+function EnvioFatura() {
+	var _this = this;
+	var dialog = null;
+	var running = false;
+	var stop = false;
+	var mode = 'A';
+	var limit = 5;
+	this.init = function() {
+		dialog = new ProgressPopup();
+		dialog.options.fnOk = function() {
+			mode = 'A';
+			if (datatable.getSelecteds().length > 0) {
+				if (!datatable.validateSelectedItems()) {
+					dialog.close();
+				}
+				mode = 'S';
+			}
+			xajax_iniciarEnvioFaturas(_this.getSelected(), 'fatura', function(r) {
+				if (r.total > 0) {
+					dialog.setTotal(r.total);
+					if (mode == 'S') {
+						dialog.setTotal(datatable.getSelecteds().length);
+					}
+					_this.execute();
+				} else {
+					dialog.close();
+					alert('Não há faturas a serem enviadas.');
+				}
+			});
+		};
+		fnCancelar = function() {
+			if (running == true) {
+				if (confirm('Confirma o cancelamento do envio?')) {
+					stop = true;
+				}
+				return false;
+			}
+			return true;
+		};
+		dialog.options.fnCancelar = dialog.options.fnBeforeClose = fnCancelar;
+		dialog.options.config.title = 'Envio de faturas';
+		dialog.open();
+	};
+	this.execute = function() {
+		running = true;
+		var itens = _this.getSelected();
+		xajax_enviarFaturas(itens, 'fatura', function(data) {
+			for (var item in itens) {
+				datatable.selecteds.remove(itens[item].id);
+			}
+			dialog.updateProgress(data.registros);
+			if (((mode == 'A' && data.registros > 0) || datatable.getSelecteds().length > 0) && !stop) {
+				_this.execute();
+				return;
+			}
+			if (stop) {
+				alert('O envio de faturas foi cancelado.');
+			} else {
+				showDialogMessage({
+					'status': 'success',
+					'description': 'As faturas foram enviadas com sucesso.'
+				});
+			}
+			running = false;
+			dialog.close();
+			listar();
+		});
+	};
+	this.getSelected = function() {
+		var selected = [];
+		datatable.getSelectedsIds.each(function() {
+			selected.push(this.id);
+			if (selected.length >= limit) {
+				return false;
+			}
+		});
+		return selected;
+	};
+}
+
+function clearWarnings() {
+	//Etiquetas
+	$('#etiqueta_nome').removeClass('warning');
+	$('#etiqueta_nome').addClass('tipsyOff');
+	$('#etiqueta_endereco').removeClass('warning');
+	$('#etiqueta_endereco').addClass('tipsyOff');
+	$('#etiqueta_numero').removeClass('warning');
+	$('#etiqueta_numero').addClass('tipsyOff');
+	$('#etiqueta_cep').removeClass('warning');
+	$('#etiqueta_cep').addClass('tipsyOff');
+	$('#etiqueta_municipio').removeClass('warning');
+	$('#etiqueta_municipio').addClass('tipsyOff');
+	$('#etiqueta_uf').removeClass('warning');
+	$('#etiqueta_uf').addClass('tipsyOff');
+	$('#avisoMensagem').hide();
+	$('#avisos').html('');
+}
+
+function openHelpDialog(title) {
+	$('<div>').attr('id', 'help-dialog').appendTo('body').css('display', 'none').attr('class', 'container');
+	$('<div>').attr('class', 'row').attr('id', 'help-row').appendTo('#help-dialog');
+	$('<div>').attr('class', 'col-xs-4').attr('id', 'menu-col').appendTo('#help-row');
+	$('<div>').attr('class', 'col-xs-8').attr('id', 'img-col').appendTo('#help-row');
+	$('<img>').appendTo('#img-col').attr('class', 'img-responsive center-block').attr('id', 'img-tutorial').attr('src', 'images/help/vendas/dados-cliente.gif');
+	$('<ol>').attr('id', 'dialog-list').appendTo('#menu-col').attr('class', 'list-group');
+  	$('<li>').appendTo('#dialog-list').attr('class', 'dialog-step list-group-item active').attr('data-image', 'images/help/vendas/dados-cliente.gif').html('1 - Preencha os dados do cliente');
+  	$('<li>').appendTo('#dialog-list').attr('class', 'dialog-step list-group-item').attr('data-image', 'images/help/vendas/dados-itens.gif').html('2 - Informe os itens da venda');
+  	$('<li>').appendTo('#dialog-list').attr('class', 'dialog-step list-group-item').attr('data-image', 'images/help/vendas/dados-parcelas.gif').html('3 - Escolha a condição de pagamento');
+  	$('<li>').appendTo('#dialog-list').attr('class', 'dialog-step list-group-item').attr('data-image', 'images/help/vendas/dados-salvar.gif').html('4 - Salve o seu pedido de venda');
+  	$('<li>').appendTo('#dialog-list').attr('class', 'dialog-step list-group-item').attr('data-image', 'images/help/vendas/dados-gerar-fatura.gif').html('5 - Gere a sua fatura');
+  	$('<li>').appendTo('#dialog-list').attr('class', 'dialog-step list-group-item').attr('data-image', 'images/help/vendas/dados-visualizar-fatura.gif').html('6 - Visualize a fatura');
+	var dialog = {
+		config: {
+			title: title,
+			height: 400
+		},
+		width: 968,
+		content: $('#help-dialog'),
+		idOk: 'btnOk',
+		idCancelar: 'btnCloseHelpDialog',
+		textCancelar: 'Fechar',
+		fnCreate: function() {
+			$('#btnOk').remove();
+			$('#btnCloseHelpDialog').on('click', function() {
+				$('#help-dialog').remove();
+			});
+			$('#dialog-list li').on('click', function() {
+				var element = $(this);
+				$('#img-tutorial').attr('src', element.attr('data-image'));
+				element.addClass('active');
+				$('#dialog-list li').each(function() {
+					if($(this).attr('data-image') != element.attr('data-image')) {
+						$(this).removeClass('active');
+					}
+				});
+			});
+		},
+		fnBeforeClose: function() {
+			$('#help-dialog').remove();
+		}
+	};
+	createDialog(dialog);
+}
+
+function imprimirSatVenda(idcfe) {
+	displayWait('vendasWait');
+	xajax_obterUrlArquivoSat(idcfe, function (data) {
+		imprimirSat(data.url, function(data) {
+			closeWait('vendasWait');
+			if (data.error != '') {
+				var msg = data.error;
+				if (data.error == 'Erro - Impressora não respondeu') {
+					alert('Impressora não respondeu. Possíveis causas:' +
+						'<ul style="margin:0;padding:10px 20px;"><li>Opção de visualização da impressão está ligada no ACBr (SAT &gt; Impressão &gt; Preview)</li>' +
+						'<li>Impressora está desligada ou não está configurada no ACBr (SAT &gt; Impressão &gt; Definir impressora)</li></ul><p>');
+				} else {
+					alert(data.error);
+				}
+			}
+		});
+	});
+}
+
+function cancelarSatVenda(idcfe) {
+	displayWait('vendasWait');
+	xajax_obterUrlArquivoSat(idcfe, function (data) {
+		cancelarSat(data.url, function(data) {
+			closeWait('vendasWait');
+			if (data.error != '') {
+				alert(data.error);
+			}
+			if (data.sucesso == true) {
+				alert('Cancelamento realizado com sucesso');
+			}
+		});
+	});
+}
+
+function imprimirEtiquetas() {
+	var ids = datatable.getSelectedsIds({asObjectKey: true});
+	if (! $.isEmptyObject(ids)) {
+		xajax_montarEtiquetasVenda(Object.keys(ids), function(idsProdutos) {
+			abrirPopupGerarEtiqueta({ venda: { ids: ids }, produto: { ids: idsProdutos } }, { multiplicarPorQuantidade: { label: 'Multiplicar por quantidade dos itens' }}, 'defaultLabelModelVenda');
+		});
+	}
+}
+
+function montarMensagemIntegracao(dados) {
+	msg = '';
+	for(var i in dados) {
+		msg += '<b>' + dados[i].nome + ':</b>' + dados[i].msg + '</br></br>';
+	}
+	Toast.create({
+		type: Toast.I,
+		title: 'Atenção',
+		msg: msg,
+		config: {
+			preventDuplicates: true,
+			timeOut: 15000
+		}
+	});
+}
+
+function mostraOcultaMensagemIntegracao(){
+	$('#mostraOcultaMensagemIntegracao').removeClass();
+	if ($('#mensagemIntegracao').is(':visible')) {
+		$('#mensagemIntegracao').hide();
+		$('#mostraOcultaMensagemIntegracao').addClass('glyphicon glyphicon-chevron-down');
+	} else {
+		$('#mensagemIntegracao').show();
+		$('#mostraOcultaMensagemIntegracao').addClass('glyphicon glyphicon-chevron-up');
+	}
+}
+
+function ocultarAvisoRemocaoFuncionalidade() {
+	$('#aviso-descontinuacao').addClass('invisivel').removeClass('warn');
+}
+
+function exibirAvisoRemocaoFuncionalidade(linkManual) {
+	if (linkManual == undefined) {
+		 linkManual = '?categoria=integrações&tipo=api';
+	}
+	$('#aviso-descontinuacao').find('#link').attr('href', ('https://manuais.bling.com.br/manual/'+ linkManual));
+	$('#aviso-descontinuacao').addClass('warn').removeClass('invisivel');
+}
+
+function getSearchFilter() {
+	var filters = filter.values();
+	filters.pagina = pagina;
+	filters.situacao = getSituacaoPeloId(filters.situacoes);
+	filters.idVendedor = filters.idPsqVendedor || '';
+	filters.codRastreio = filters.codRastreio || '';
+	filters.numeroLojaVirtual = parseSearchFilterNumeroPedidoLoja(filters.psqNumeroPedidoDaLojaVirtual);
+	filters.situacaoRastro = filters.situacaoObjetoCorreios || '';
+	filters.transportador = filters.psqTransportador || '';
+	filters.idLoja = filters.lojasVinculadas || 'todas';
+	filters.idConfUnidadeNegocio = filters.unidadesNegocioSelect;
+	filters.situacaoEnvioFatura = filters.fatura;
+	filters.idContato = filters.idContatoConsulta;
+	filters.uf = filters.psqEstado;
+	filters.idMunicipio = filters.idMunicipioPsq;
+	filters.bairro = filters.pesquisaBairro;
+	if (filters.idContato != 0) {
+		filters.pesquisa = '';
+	}
+	return filters;
+}
+
+function parseSearchFilterNumeroPedidoLoja(psqNumeroPedidoDaLojaVirtual) {
+	var numerosPedidosLojaVirtual = psqNumeroPedidoDaLojaVirtual || '';
+	numerosPedidosLojaVirtual = numerosPedidosLojaVirtual.split(';', 100);
+	var numeroLojaVirtual = [];
+
+	$.each(numerosPedidosLojaVirtual, function (index, numeroPedido) {
+		if (numeroPedido.length && numeroPedido.length <= 50) {
+			numeroLojaVirtual.push(numeroPedido.trim());
+		}
+	});
+
+	$('#psqNumeroPedidoDaLojaVirtual').val(numeroLojaVirtual.join(';'));
+
+	return numeroLojaVirtual;
+}
+
+function initActionBar() {
+	actionBar = new ActionBar({
+			type: 'vendas',
+			helpIcons: [
+				{
+					title: 'Manual de pedidos de venda',
+					href: 'https://manuais.bling.com.br/manual/?item=pedidos-de-venda',
+					type: 'help'
+				},
+				{
+					title: 'Acesse os parâmetros de pedidos de venda',
+					href: 'preferencias.php#vendas/vendas-parametros',
+					type: 'preferencias',
+					'data-system-permission': 'isAdmin'
+				}
+			],
+			moreActions: [
+				{
+					group: 'Enviar',
+					actions: [
+						{
+							text: 'Faturas selecionadas', permission:'FaturasNaoEnviadas', function:'enviarFaturas', disabled: 'true'
+						},
+						{
+							text: 'Rastreio para o Magento', permission:'RastreioMagento', function:'enviarRastreioLojaVirtualSelecionado', disabled: 'true'
+						},
+					]
+				},
+				{
+					group: 'Gerar',
+					actions: [
+						{
+							text: 'NFC-es selecionadas', permission:'nfce', function: 'gerarNfceSelecionadas', disabled: 'true'
+						},
+						{
+							text: 'Fatura em lote', permission: 'PainelFatura', function: 'faturarEmLote', disabled: 'true'
+						},
+						{
+							text: 'Comprovantes selecionados', permission:'PlanoBling', function:'gerarComprovantes', disabled: 'true'
+						},
+						{
+							text: 'Ordens de produção', permission:'OrdensProducao', function:'gerarOrdensProducao', disabled: 'true'
+						},
+					]
+				},
+				{
+					group: 'Exportar',
+					actions: [
+						{
+							text: 'Dados para planilha', permission:'VendasExportacaoPlanilha', function:'exportar'
+						},
+						{
+							text: 'Dados selecionados para o SIGEP WEB', permission:'EtiquetasCorreios', function:'exportarContatosSIGEPWeb', disabled: 'true'
+						},
+						{
+							text: 'Endereços selecionados', permission:'PlanoBling', function:'exportarEnderecosPlanilha', disabled: 'true'
+						}
+					]
+				},
+				{
+					group: 'Imprimir',
+					actions: [
+						{
+							text: 'Etiquetas selecionadas', permission: 'PlanoBling', function:'imprimirEtiquetas', disabled: 'true'
+						},
+						{
+							text: 'Relatório de produção', permission:'Producao', function:'imprimirSelecionados', disabled: 'true'
+						},
+						{
+							text: 'Vendas agrupadas', permission:'relatorio_bairro_pedidos_venda', function:'mostrarPopupAgrupamento'
+						},
+						{
+							text: 'Declarações de conteúdo', permission:'EtiquetaTransporte', function:'declaracaoConteudo', disabled: 'true'
+						},
+					]
+				},
+				{
+					group: 'Importar',
+					actions: [
+						{
+							text: 'Pedidos Groupon', permission:'IntegracaoGroupon', function:'importarPedidosGroupon'
+						},
+						{
+							text: 'Pedidos Shop Delivery', permission:'IntegracaoShopDelivery', function:'shopDelivery'
+						},
+						{
+							text: 'Pedidos UOL Shopping', permission:'UOLShopping', function:'importarPedidosUol'
+						},
+						{
+							text: 'Pedido XML', permission:'NotaPedidoXML', function:'buscarPedidoXML'
+						},
+						{
+							text: 'Arquivo CRNET', permission:'IntegracaoCRNET', function:'buscarPedidoArquivo'
+						},
+					]
+				},
+				{
+					group: 'Outras',
+					actions: [
+						{
+							text: 'Faturar pedidos selecionados', permission:'NotasFiscais', function:'faturarPedidosSelecionados', disabled: 'true'
+						},
+						{
+							text: 'Ler cupons fiscais emitidos', permission:'CupomFiscal', function:'lerArquivosRetornoECF'
+						},
+					]
+				}
+			]
+	});
+}
+
+function gerarOrdensProducao(venda) {
+	if (!datatable.validateSelectedItems()) {
+		return;
+	}
+
+	createDialog({
+		htmlTitle: 'Gerar Ordem de Produção',
+		content: $('<div>', { class:'dialog-ordens'}).append(
+			$('<div>', {'class': 'row'}).append(
+				$('<p>', {style:'text-align: left; margin-bottom: 35px; padding-left: 15px; color: #666666;'}).append('Selecione abaixo quais depósitos deseja utilizar.'),
+				$('<div>', {'id': 'popup_deposito_origem'}).append(
+					$('<div>', {'class': 'col-xs-6 group-item-form'}).append(
+						$('<label>', {'for': 'idDepositoOrigem', 'class': 'label-item-form', style:'color: #666666; font-size: 12px; font-weight: normal;'}).text('Depósito de Origem'),
+						$('<div>', {'id': 'opcoesDepositosOrigem'})
+					)
+				),
+				$('<div>', {'id': 'popup_deposito_destino'}).append(
+					$('<div>', {'class': 'col-xs-6 group-item-form'}).append(
+						$('<label>', {'for': 'idDepositoDestino', 'class': 'label-item-form', style:'color: #666666; font-size: 12px; font-weight: normal;'}).text('Depósito de Destino'),
+						$('<div>', {'id': 'opcoesDepositosDestino'})
+					)
+				)
+			),
+			$('<div>', {'class': 'row'}).append(
+				$('<h2>', {'class': 'title-form', style:'text-align: left; margin-top: 25px; margin-bottom: 25px; padding-left: 15px; color: #666666;'}).append('Produtos')
+			),
+			$('<div>', {'class': 'row'}).append(
+				$('<div>', {'class': 'linha_form col-xs-12 col-sm-6 group-item-form margin_top10'}).append(
+					$('<div>', {'class': 'vertical-align-inline'}).append(
+						$('<div>', {'class': 'input-checkbox'}).append(
+							$('<input>', { type:'checkbox', class:'tcheck', id:'considerarProdutosTerceirizados', name:'considerarProdutosTerceirizados', value:'S'}),
+							$('<label>', { for:'considerarProdutosTerceirizados'})
+						),
+						$('<label>', {'class': 'label-item-form-input', for:'considerarProdutosTerceirizados', text:'Considerar produtos terceirizados'})
+					)
+				)
+			),
+			$('<div>', {'class': 'row'}).append(
+				$('<div>', {'class': 'linha_form col-xs-12 col-sm-6 group-item-form margin_top10'}).append(
+					$('<div>', {'class': 'vertical-align-inline'}).append(
+						$('<div>', {'class': 'input-checkbox'}).append(
+							$('<input>', { type:'checkbox', class:'tcheck', id:'agruparProdutosOrdens', name:'agruparProdutosOrdens', value:'S'}),
+							$('<label>', { for:'agruparProdutosOrdens'})
+						),
+						$('<label>', {'class': 'label-item-form-input', for:'agruparProdutosOrdens', text:'Agrupar produtos iguais'})
+					)
+				)
+			)
+		),
+		textOk: 'Gerar Ordem de Produção',
+		slideIn: true,
+		width: 440,
+		fnCreate: function() {
+			var style = 'border-radius: 8px; color: #666666;';
+			xajax_obterOpcoesDepositos('idDepositoOrigem', '', 'N', 0, 'opcoesDepositosOrigem', style);
+			xajax_obterOpcoesDepositos('idDepositoDestino', '', 'N', 0, 'opcoesDepositosDestino', style);
+			$('.ui-dialog-buttonset .button-default').css("cssText", "margin-right: 15px !important");
+		},
+		fnOk: function() {
+			displayWait('vendasWait', true, 'Gerando ordens de produção, aguarde...');
+
+			var pedidos = [];
+			$.each(datatable.getSelecteds(), function() {
+				pedidos.push({
+					idContato: parseFloat(this.idContato),
+					idVenda: parseFloat(this.id),
+					numeroPedido: this.numeroPedido
+				});
+			});
+			xajax_gerarOrdensProducao(pedidos, $('#idDepositoOrigem').val(), $('#idDepositoDestino').val(), $('#considerarProdutosTerceirizados').is(":checked"), $('#agruparProdutosOrdens').is(":checked"), function(retorno) {
+				$('.dialog-ordens').html(
+					$('<div>', { class:'center'}).append(
+						$('<div>').append(function() {
+							if (retorno.ordens.length > 0) {
+								gaSendMessage('Gerar ordens de produção via venda - Sucesso');
+								return $('<div>').append(
+									$('<img>', {'src': '/images/icon_check_feedback.svg'}),
+									$('<div>', {'class': 'row'}).append(
+										$('<p>', {style:'font-size: 15px; font-weight: bold; color: #01D67C;'}).append('Ordem de Produção gerada com sucesso!'),
+										$('<p>', {style:'margin-bottom: 35px; color: #666666;'}).append('Clique no botão abaixo para consultar suas Ordem de Produção')
+									),
+									$('<div>', {style: "margin-bottom: 60px;", 'class': 'row'}).append(
+										$('<a>', {'href': '/ordens.producao.php#list', style:'margin-top: 25px; color: #01CC77; font-weight: bold; font-size: 12px;'}).append('Ordens de Produção')
+									)
+								)
+							} else {
+								gaSendMessage('Gerar ordens de produção via venda - Erro');
+								return $('<div>').append(
+									$('<p>', {style:'font-size: 15px; font-weight: bold; color: #01D67C;'}).append('Nenhuma Ordem de Produção gerada!')
+								);
+							}
+						})
+						.append(function() {
+							if (retorno.erros.length > 0) {
+								gaSendMessage('Gerar ordens de produção via venda - Erro');
+								var msg = 'Houve um erro na geração de ordens do(s) seguinte(s) pedido(s) de venda:';
+								erros = $('<div>')
+									.append($('<span>', { 'text': msg})).append($('<br><br>'))
+										.append($('<div>', { 'css': { 'max-height': '200px', 'min-height': '120px'}})
+											.append($('<table>', { 'id': 'lista_erro_geracao', class: 'datatable'})
+												.append($('<tr>').append($('<th>', { 'text': 'Número'}), $('<th>', { 'text': 'Motivo'})))
+												.append(function() {
+													var trs = [];
+													$.each(retorno.erros, function(i, erroVenda) {
+														$.each(erroVenda.errors, function(id, erro) {
+															$.each(erro, function(key, value) {
+																trs.push($('<tr>', { 'data-id': id }).append(
+																	$('<td>').append($('<a>', { 'target': '_blank', 'href': 'vendas.php#edit/' + id, 'text': erroVenda.numeroPedido })),
+																	$('<td>', {style:'text-align: left', 'text': value.msg})
+																));
+															});
+														});
+
+													});
+													return trs;
+												}
+											)
+										)
+									)
+								return erros;
+							} else {
+								return '';
+							}
+						})
+					)
+				);
+
+				$('.ui-dialog-buttonset .button-default').addClass('hide');
+				$('.ui-dialog-buttonset .button-cancel span').html('FECHAR');
+				closeWait('vendasWait');
+			});
+
+			return false;
+		}
+	});
+}
+
+function estornarContas(id) {
+	displayWait('vendasWait', true, 'Estornando conta, aguarde...');
+	xajax_excluirLancamentosContasTela(id, function(response) {
+		if (!response.success && response.errorMessage) {
+			alert(response.errorMessage);
+		}
+		listar();
+		closeWait('vendasWait');
+	});
+}
+
+function estornarEstoque(id) {
+	displayWait('vendasWait', true, 'Estornando estoque, aguarde...');
+	xajax_excluirLancamentoEstoque(id, function(response) {
+		if (!response.success && response.errorMessage) {
+			alert(response.errorMessage);
+		}
+		listar();
+		closeWait('vendasWait');
+	});
+}
+
+function lancarEstoques(idOrigem, idDeposito) {
+	var deferredObj = $.Deferred();
+
+	displayWait('vendasWait', true, 'Lançando estoque, aguarde...');
+	xajax_lancarEstoques(idOrigem, idDeposito, function(response) {
+		deferredObj.resolve();
+		if (!response.success && response.errorMessage) {
+			alert(response.errorMessage);
+		}
+		listar();
+	});
+
+
+	return deferredObj.promise();
+}

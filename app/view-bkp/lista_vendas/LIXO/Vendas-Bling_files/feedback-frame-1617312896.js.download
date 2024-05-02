@@ -1,0 +1,116 @@
+function FeedbackFrame(config) {
+	this.constructor(config);
+}
+
+FeedbackFrame.prototype.constructor = function(config) {
+	this.conf = {
+		question : 'Deixe o seu feedback!',
+		container : $('#content-filter'),
+		width: 'auto',
+		height: 'auto',
+		afterShow : false,
+		module : '',
+		id : 'frameFeedback',
+		options: [
+			{ icon:'far fa-thumbs-up', id:'positiveFeedback', value: 1 },
+			{ icon:'far fa-thumbs-down', id: 'negativeFeedback', value: 0 }
+		],
+		label: 'Deixe seu comentário',
+		action: this.action
+	};
+	LerConfiguracoes(this.conf, config);
+	this.build();
+};
+
+FeedbackFrame.prototype.valid = function() {
+	return (storageAvailable('localStorage') && !localStorage.getItem('storageFeedback'+this.conf.module+'_new'));
+};
+
+FeedbackFrame.prototype.build = function() {
+	if  (!this.valid()) {
+		return;
+	}
+	var ref = this;
+	$(this.conf.container).find('div:last > button').css({'margin-bottom': '20px'});
+	$(this.conf.container).append(
+		$('<div>', { id: this.conf.id, class:'container-feedback hidden-xs hidden-sm' }).append(
+			$('<div>', {id: 'waitFeedback' }),
+			function() {
+				ref.options = [ $('<span>', { text: ref.conf.question}) ];
+				$.each(ref.conf.options, function(i,item) {
+					ref.options.push(
+						$('<span>', { class:this.icon + ' option', id:this.id}).on('click', function() {
+							var v = item.value;
+							return function () {
+								ref.next();
+								ref.option = v;
+								$('.container-feedback .option.selected').removeClass('selected');
+								$(this).addClass('selected');
+							};
+						}())
+					);
+				});
+				ref.options = $('<div>').append(
+					ref.options
+				);
+				return ref.options;
+			}(),
+			function() {
+				if (!ref.conf.label) {
+					return '';
+				}
+				var pfn = function (el) {
+					$(el).css('padding-bottom', '37px');
+				};
+				ref.message = $('<div>', { style: 'display: none; position:relative' }).append(
+					$('<textarea>', { id:'textarea-feedback', class:'item-form textarea-item-form', placeholder: ref.conf.label }).on('keydown', function() {
+						pfn(this);
+						$(this).unbind('keydown',pfn)
+					}),
+					$('<div>', { style: 'text-align: right;position: absolute;bottom: 2px;right: 0;'}).append(
+						$('<button>', { class:'button-default-novo', id:'enviar-feedback'}).html(
+							[ 'Enviar ' , $('<span>', { class:'fas fa-paper-plane'})]
+						).on('click', function() {
+							ref.send();
+						})
+					)
+				);
+				return ref.message;
+			}()
+		)
+	);
+	var textarea = document.getElementById('textarea-feedback');
+	new Autosize(textarea);
+};
+
+
+FeedbackFrame.prototype.send = function() {
+	if (!this.valid() || this.option === undefined || !$('#textarea-feedback').val().trim()) {
+		Toast.create({ type: Toast.W, title: 'Feedback não enviado', msg: 'Informe todos os campos, por favor.' });
+		return;
+	}
+	displayWait('waitFeedback');
+	if (!typeof window.xajax_enviarDadosFeedback == 'function') {
+		return;
+	}
+	var sendFeedbackMethod = window.xajax_enviarDadosFeedback;
+	var ref = this;
+	sendFeedbackMethod({
+		msg: $('#textarea-feedback').val(),
+		status: this.option,
+		modulo: this.conf.module
+	}, function(dataResponse) {
+		localStorage.setItem('storageFeedback'+ref.conf.module+'_new', true);
+		$('#'+ref.conf.id).hide('fast');
+		Toast.create({ type: Toast.S, title: 'Feedback enviado!', msg: 'Obrigado pela sua opinião.' });
+		$('#filter-button-area .btn-secundary-novo').css('margin-bottom', '');
+		closeWait('waitFeedback');
+	});
+};
+
+FeedbackFrame.prototype.next = function() {
+	if (this.message) {
+		this.message.show();
+		return;
+	}
+};

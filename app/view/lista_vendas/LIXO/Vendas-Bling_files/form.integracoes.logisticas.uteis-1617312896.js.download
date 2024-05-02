@@ -1,0 +1,481 @@
+var printWin;
+var pontosRetirada = [];
+
+function updatePrintWin(url, downloadFiles, dadosRotulo) {
+	if (url.length > 0) {
+		var context = $(printWin.document).find('body').html('');
+
+		if (dadosRotulo == null) {
+			printWin.location = url;
+		}
+
+		if (downloadFiles) {
+			context.append($('<div>').append(
+				$('<p>', { 'text': 'Preparando arquivos para o download...' }),
+				$('<p>', { 'text': 'Após finalizar clique em ' }).append(
+					$('<a>', { 'href': '#', 'html': 'retornar', 'onclick': 'window.close()' })
+				)
+			));
+		} else {
+			directPrint({
+				'acao': url,
+				'metodo': 'post',
+				'dados': JSON.stringify({'dadosRotulo': dadosRotulo}),
+				'contentType': 'application/json'
+			}, function(html) {
+				context.append(html);
+				setTimeout(function() { printWin.print(); }, 500);
+			});
+		}
+	} else {
+		printWin.close();
+	}
+}
+
+function mostrarAviso(erro) {
+	var message = '';
+	if ($.isArray(erro.msg)) {
+		message += '<ul>';
+		$.each(erro.msg, function(i, val) {
+			message += '<li>' + val + '</li>';
+		});
+		message += '</ul>';
+	} else {
+		message = erro.msg;
+	}
+
+	showDialogMessage({
+		'status': 'warning',
+		'htmlTitle': 'Aviso',
+		'description': message,
+		'hideCancel': true,
+		'textOk': 'Fechar'
+	});
+}
+
+function montarPaginaImpressao(tipoRelatorio, dadosRotulo) {
+	var params = {
+		'metodo': 'post',
+		'dados': JSON.stringify({'dadosRotulo': dadosRotulo}),
+		'contentType': 'application/json'
+	};
+
+	switch(tipoRelatorio) {
+		case 'voucher':
+			params.acao = './impressao/voucherPlp.php';
+			break;
+		case 'listaPostagem':
+			params.acao = './impressao/listaPostagemPlp.php';
+			break;
+		case 'ars':
+			params.acao = './impressao/emissaoAR.php';
+			break;
+		case 'etiquetas':
+			params.acao = './impressao/etiquetaCorreios.php';
+			break;
+		case 'etiquetasNovoLayout':
+			params.acao = './impressao/etiquetaCorreiosNovoLayout.php';
+			break;
+		case 'etiquetasModelo3':
+			params.acao = './impressao/etiquetaCorreiosModelo3.php';
+			break;
+		case 'discriminacaoConteudo':
+			params.acao = './impressao/discriminacaoConteudo.php';
+			break;
+		case 'declaracaoConteudo':
+			params.acao = './impressao/declaracaoConteudo.php';
+			break;
+		case 'plpCorreios':
+			params.acao = './impressao/plpCorreiosB2W.php';
+			break;
+		case 'plpDirect':
+			params.acao = './impressao/plpDirectB2W.php';
+			break;
+	}
+
+	directPrint(params, function(res) {
+		sandbox = document.createElement('div');
+		$(sandbox).html($.parseHTML(res));
+		$(sandbox).css('min-width', '500px');
+		$(sandbox).print();
+	});
+}
+
+function enviarCodigoRastreamentoPorEmail(idVenda, numeroVenda, codigoEtiqueta, idContato, numeroLoja, idObjeto, tipoIntegracaoLoja, numeroNF) {
+	if (tipoIntegracaoLoja == 'WooCommerceWH') {
+		numeroLoja = numeroLoja.split('_');
+		numeroLoja = numeroLoja[0];
+	}
+
+	$.get('templates/form.envio.rastreio.email.popup.php?idVenda='+idVenda+'&numeroPedido='+numeroVenda+'&codEtiqueta='+codigoEtiqueta+'&idDoContato='+idContato+'&numeroLoja='+numeroLoja+'&idObjeto='+idObjeto+'&numero='+numeroNF, function(data) {
+		var fnClose = function() {
+			$(".tipsy").remove();
+		};
+
+		createDialog({
+			content: data,
+			config: {
+				title: 'Envio de rastreio por email',
+				width: getMobileWidthForDialogs(440)
+			},
+			textOk: 'Enviar',
+			fnOk: enviarEmailRastreioCliente,
+			fnBeforeClose: fnClose,
+			fnCancelar: fnClose
+		});
+
+		$('.inf').tipsy({trigger: 'click', gravity: 'w', delayIn: 500, delayOut: 1000});
+	});
+}
+
+function mostrarMaisOpcoesEnvioRastreio() {
+	$('#dadosRemetenteEnvioRastreio').slideToggle(200);
+}
+
+function enviarEmailRastreioCliente() {
+	displayWait('waitPopup');
+	var params = {
+		'nomeDestinatario': $('#rastreioNomeDestinatario').val(),
+		'emailDestinatario': $('#rastreioEmailDestinatario').val(),
+		'codRastreio': $('#codRastreioEmail').val(),
+		'idOrigem': $('#idOrigemRastreio').val(),
+		'dadosEmail': {
+			'idDoc': $('#idObjetoEmail').val(),
+			'assunto': $('#rastreioAssunto').val(),
+			'mensagem': $('#rastreioMensagemEnvio').val(),
+			'nomeRemetente': $('#rastreioNomeRemetente').val(),
+			'emailCopia': $('#rastreioEmailCopia').val(),
+			'emailResposta': $('#rastreioEmailResposta').val(),
+			'numeroPedido': $('#numeroPedidoEmail').val(),
+			'numeroLoja': $('#numeroLojaEmail').val()
+		}
+	};
+
+	xajax_enviarEmailRastreioCliente(params);
+
+	return false;
+}
+
+function atualizaStatusEnvioRastreio(msg, enviou) {
+	if (enviou) {
+		$('#mensagemStatusRastreio').removeClass('alert-box-warning').addClass('alert-box-ok');
+	} else {
+		$('#mensagemStatusRastreio').removeClass('alert-box-ok').addClass('alert-box-warning');
+	}
+
+	$('#mensagemStatusRastreio').html('<p>' + msg + '</p>');
+	$('#mensagemStatusRastreio').show();
+}
+
+function choosePrintFormat(dadosObj) {
+	var content = $('<div>', {
+		class: 'text_left margin_left',
+	}).append(
+		$('<label>', {class: 'label-item-form wh100', for: 'printFormat', text: 'Tipo de impressão'}),
+		$('<select>', {class: 'item-form w18 campo-cfg', id: 'printFormat', type: 'select'}).append(
+			$('<option>', {value: 'pdf', text: 'Impressão normal (PDF)'}),
+			$('<option>', {value: 'zpl2', text: 'Impressora térmica (ZPL2)'})
+		)
+	);
+
+	createDialog({
+		content: content,
+		config: {title: 'Selecione o formato da impressão'},
+		fnOk: function() {
+			if ($('#impressaoWait').length > 0) {
+				displayWait('impressaoWait', true, 'Imprimindo as etiquetas selecionadas, aguarde...');
+			}
+
+			formatoImpressao = $('#printFormat option:selected').val();
+			printWin = window.open('./impressao/etiquetasEnvio.php', '_blank');
+			printWin.onload = function() {
+				xajax_imprimirRotuloExterno(dadosObj, 1, formatoImpressao);
+			};
+		},
+	});
+}
+
+function chooseDeclarationModel(objsLogisticos) {
+	var content = $('<div>', {
+		class: 'text_left margin_left',
+	}).append(
+		$('<label>', {class: 'label-item-form wh70', for: 'declarationModel', text: 'Escolha o modelo de declaração de conteúdo para impressão.'}),
+		$('<select>', {class: 'item-form w18 campo-cfg', id: 'declarationModel', type: 'select'}).append(
+			$('<option>', {value: 'declaracaoConteudo', text: 'Via única'}),
+			$('<option>', {value: 'discriminacaoConteudo', text: 'Duas vias'})
+		)
+	);
+
+	createDialog({
+		content: content,
+		config: {
+			title: 'Declaração de Conteúdo'
+		},
+		width: 440,
+		fnOk: function() {
+			if ($('#impressaoWait').length > 0) {
+				displayWait('impressaoWait', true, 'Imprimindo declarações de conteúdo selecionadas, aguarde...');
+			}
+
+			var declarationModel = $('#declarationModel option:selected').val();
+
+			if (!objsLogisticos) {
+				verificarImpressaoSelecionados(declarationModel, true);
+			} else {
+				xajax_imprimirRotulo({'etiquetas': objsLogisticos}, declarationModel);
+			}
+		}
+	});
+}
+
+function abrirPopupPontosRetirada() {
+	$.get('templates/form.logisticas.pontos.retirada.php', function(data) {
+		var dialog = {
+			content: data,
+			config: {
+				title: 'Pontos de retirada',
+				width: getMobileWidthForDialogs(648),
+				height: 650
+			},
+			textOk: 'Escolher ponto',
+			fnOk: function() {
+				displayWait('sincronizarRastroWait');
+
+				if ($('#etiqueta_mostrar').length > 0) {
+					if ($('#etiqueta_mostrar').prop('checked') == false) {
+						$('#etiqueta_mostrar').click();
+					}
+
+					salvarPontoRetirada();
+				} else {
+					if ($('#enderecoAlternativo').prop('checked') == false) {
+						$('#enderecoAlternativo').click();
+					}
+					salvarPontoRetirada();
+				}
+			},
+			fnCreate: function() {
+				ajustarPopupConsultaPontosRetirada();
+				obterPontosRetirada();
+			},
+			fnBeforeClose: function() {
+				$('.popover').hide();
+			}
+		};
+
+		createDialog(dialog);
+	});
+}
+
+function ajustarPopupConsultaPontosRetirada() {
+	var dadosContatoRapido = null;
+	if (contato.config) {
+		if (contato.data()) {
+			dadosContatoRapido = contato.data();
+		}
+	}
+
+	var cep = ($('#cepDestino').val() || $('#etiqueta_cep').val() || (dadosContatoRapido ? dadosContatoRapido.cep : ''));
+	var cidade = ($('#cidadeContato').val() || $('#etiqueta_municipio').val() || (dadosContatoRapido ? dadosContatoRapido.cidade : ''));
+	var endereco = ($('#enderecoContato').val() || $('#etiqueta_endereco').val() || (dadosContatoRapido ? dadosContatoRapido.endereco : ''));
+
+	$('#cep_busca_pontos_retirada').val(cep).mask('99.999-999');
+	$('#cidade_busca_pontos_retirada').val(cidade);
+	$('#endereco_busca_pontos_retirada').val(endereco);
+
+	$('#dados_endereco_destinatario').html('').append(
+		$('<span>', { html: 'Endereço: ' + endereco + '<br>' }),
+		$('<span>', { html: 'CEP: ' + formataCep(cep) + '<br>' }),
+		$('<span>', { html: 'Cidade: ' + cidade })
+	);
+
+	$('#mais_opcoes_busca_pontos_retirada').click(function() {
+		$('#opcoes_busca_ponto_retirada').toggleClass('fa-plus-square fa-minus-square');
+		$('#form_busca_pontos_retirada').slideToggle(150);
+	});
+
+	$('.icon-info-sign').tipsy({ gravity: 'w' });
+}
+
+function obterPontosRetirada() {
+	displayWait('pontos_retirada_wait');
+	$('#erro_busca_pontos_retirada, #resultado_busca_pontos_retirada').html('');
+
+	var integracaoLogistica = {
+		'idIntegracao': ($('#idIntegracao').val() ? $('#idIntegracao').val() : $('#integracaoLogistica option:selected').val()),
+		'tipoIntegracao': ($('#tipoIntegracaoLogistica').val() ? $('#tipoIntegracaoLogistica').val() : $('#integracaoLogistica option:selected').attr('data-tipointegracao'))
+	};
+
+	xajax_consultarPontosRetirada(integracaoLogistica, xajax.getFormValues('form_busca_pontos_retirada'), function(pickupPoints) {
+		listarPontosRetirada(pickupPoints);
+	});
+}
+
+function listarPontosRetirada(pickupPoints) {
+	closeWait('pontos_retirada_wait');
+	$('#lista_pontos_retirada').show();
+	$('#form_busca_pontos_retirada .group-item-form-warning').removeClass('group-item-form-warning');
+
+	$.each(pickupPoints, function(key) {
+		pontosRetirada.push(this);
+
+		var endereco = this.street + ', ' + this.streetNumber + (this.complement.trim() != '' ? ' (' + this.complement + '), ' : ', ') + (this.neighborhood.trim() != '' ?this.neighborhood.trim() + ', ' : '') + this.city;
+		var info = $('<a>', { 'class': 'tableIcon', 'name': '[popoverInfoPontoRetirada]', 'data-container': 'body', 'data-placement': 'left', 'data-trigger': 'click', 'data-toggle': 'popover', 'data-content': prepararHorariosFuncionamento(this.workingHours), 'data-html': true }).append(
+			$('<i>', { 'class': 'icon-info-sign' })
+		);
+
+		$('#resultado_busca_pontos_retirada').append(
+			$('<tr>').append(
+				$('<td>').append(
+					$('<div>', { 'class': 'input-radio' }).append(
+						$('<input>', { 'type': 'radio', 'name': 'pontosRetirada', 'id': 'pontosRetirada' + key, 'value': key }),
+						$('<label>', { 'for': 'pontosRetirada' + key }),
+						$('<label>', { 'class': 'label-item-form-input', 'for': 'pontosRetirada' + key, 'text': ' ' })
+					)
+				),
+				$('<td>', { 'text': this.name }),
+				$('<td>', { 'text': endereco }),
+				$('<td>', { 'text': formataCep(this.zipCode) }),
+				$('<td>', { 'text': this.distance + 'm' }),
+				$('<td>', { 'id': 'infoPontoRetirada' + key }).append(info)
+			)
+		);
+	});
+
+	if ($('#lista_pontos_retirada tr').length <= 1) {
+		$('#lista_pontos_retirada').hide();
+		$('#erro_busca_pontos_retirada').show();
+
+		$('#erro_busca_pontos_retirada').html(
+			$('<div>', { 'id': 'aviso', 'class': 'col-xs-12 alert-box alert-box-warning' }).append(
+				$('<p>', { 'html': 'Nenhum ponto de retirada foi retornado.' }),
+				$('<p>', { 'html': 'Verifique se os dados pesquisados são válidos ou tente refinar a busca.' })
+			)
+		);
+
+		if ($('#cidade_busca_pontos_retirada').val().trim() == '') {
+			$('#cidade_busca_pontos_retirada').parent().addClass('group-item-form-warning');
+		}
+
+		if (!$('#form_busca_pontos_retirada').is(':visible')) {
+			$('#mais_opcoes_busca_pontos_retirada').click();
+		}
+	}
+
+	initPopovers({ 'elements': $('a[name*=popoverInfoPontoRetirada]') });
+}
+
+function prepararHorariosFuncionamento(horariosFuncionamento) {
+	var conteudo = $('<tbody>');
+	var diasSemana = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+
+	$.each(horariosFuncionamento, function(key) {
+		conteudo.append(
+			$('<tr>').append(
+				$('<th>', { 'html': diasSemana[key] }),
+				$('<td>', { 'html': (this.morning ? this.morning[0] : '') + ' - ' + (this.morning ? this.morning[1] : '') }),
+				$('<td>', { 'html': (this.afternon ? this.afternon[0] : '') + ' - ' + (this.afternon ? this.afternon[1] : '') })
+			)
+		);
+	});
+
+	var html = $('<div>').append(
+		$('<h4>', { 'class': 'text-center', 'text': 'Horários de funcionamento', 'style': 'color: white;' }),
+		$('<table>', { 'class': 'table table-responsive table-horario-pontos-retirada' }).append(
+			$('<thead>').append(
+				$('<tr>').append(
+					$('<th>', { 'text': 'Dia da semana' }),
+					$('<th>', { 'text': 'Manhã' }),
+					$('<th>', { 'text': 'Tarde' })
+				)
+			),
+			conteudo
+		)
+	);
+
+	return $('<div>').append(html).html();
+}
+
+function salvarPontoRetirada() {
+	var idPontoEscolhido = $('input[name=pontosRetirada]:checked').val();
+
+	if (idPontoEscolhido) {
+		var dadosPontoRetirada = arrayJsonSearch(pontosRetirada, 'id', idPontoEscolhido);
+		$('#idCotacao').val(idPontoEscolhido);
+
+		if ($('#etiqueta_mostrar').length > 0) {
+			if ($('#etiqueta_mostrar').prop('checked') == false) {
+				$('#etiqueta_mostrar').click();
+			}
+
+			if (volumesLogistica.length > 0) {
+				$.each(volumesLogistica, function(i, volume) {
+					volume.idCotacao = idPontoEscolhido;
+					volumesLogistica[i] = volume;
+				});
+			}
+		} else if ($('#enderecoAlternativo').prop('checked') == false) {
+			$('#enderecoAlternativo').click();
+		}
+
+		$('#etiqueta_nome').val($('#contato').val() + ' (Retirar em: ' + dadosPontoRetirada.name + ')');
+		$('#etiqueta_endereco').val(dadosPontoRetirada.street);
+		$('#etiqueta_numero').val(dadosPontoRetirada.streetNumber);
+		$('#etiqueta_complemento').val(dadosPontoRetirada.complement);
+		$('#etiqueta_municipio').val(dadosPontoRetirada.city);
+		$('#etiqueta_cep, #cepDestino').val(formataCep(dadosPontoRetirada.zipCode));
+		$('#etiqueta_bairro').val(dadosPontoRetirada.neighborhood);
+
+		$.ajax({
+			'type': 'POST',
+			'url': 'services/cep.lookup.php',
+			'data': { 'cep': dadosPontoRetirada.zipCode },
+			'dataType': 'json'
+		}).done(function(data) {
+			closeWait('sincronizarRastroWait');
+
+			if (data.status.codigo == 200) {
+				$('#etiqueta_id_municipio').val(data.codCidade);
+				$('#etiqueta_uf').val(data.uf);
+				$('#etiqueta_municipio').val(data.cidade);
+
+				Toast.create({
+					'type': Toast.S,
+					'msg': 'Ponto de retirada selecionado com sucesso!<br>O endereço de entrega foi atualizado.'
+				});
+			} else if (data.status.codigo == 0) {
+				exibirMsgEndereco('CEP do estabelecimento não foi encontrado pela consulta dos Correios.<br><br>Por favor, preencha os campos de endereço marcados.');
+			} else {
+				exibirMsgEndereco('A consulta de CEP dos Correios não está respondendo.<br><br>Por favor, tente obter os pontos de retirada novamente ou preencha manualmente os campos de endereço marcados.');
+			}
+		}).fail(function() {
+			closeWait('sincronizarRastroWait');
+			exibirMsgEndereco();
+		});
+	} else {
+		closeWait('sincronizarRastroWait');
+		Toast.create({ 'msg': 'Nenhum ponto de retirada foi selecionado!' });
+	}
+}
+
+function exibirMsgEndereco(msg) {
+	var content = $('<div>', { 'class': 'container-fluid' }).append(
+		$('<div>', { 'class': 'col-xs-12 alert-box alert-box-info margin-top0' }).append(
+			$('<p>', { 'html': 'O ponto de retirada foi escolhido com sucesso, porém não foi possível setar automaticamente o endereço de entrega.<br><strong>Motivo:</strong> ' + (msg || '<br><br>Por favor, preencha os campos de endereço marcados.') })
+		)
+	);
+
+	var dialog = {
+		'content': content,
+		'hideCancel': true,
+		'width': getMobileWidthForDialogs(440),
+		'config': {
+			'title': 'Aviso'
+		}
+	};
+
+	createDialog(dialog);
+	$('#etiqueta_cep').addClass('ac_error');
+	$('#etiqueta_uf').addClass('ac_error');
+	$('#etiqueta_municipio').addClass('ac_error');
+}

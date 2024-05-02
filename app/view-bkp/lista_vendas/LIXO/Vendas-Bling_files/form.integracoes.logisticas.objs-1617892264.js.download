@@ -1,0 +1,1893 @@
+var LogisticFactory = function() {};
+LogisticFactory.create = function(logistic) {
+	var obj;
+	try {
+		obj = new window[logistic + 'Integration']();
+	} catch(e) {
+		obj = new CorreiosIntegration();
+	}
+	return obj;
+};
+
+var IntegrationBase = function() {};
+IntegrationBase.prototype.TITLE_SEND_SHIPMENT = 'Envio de remessa';
+IntegrationBase.prototype.hideBtnTrackingSync = false;
+IntegrationBase.prototype.parseObject = function(obj) {
+	obj.numeroVenda = document.createDocumentFragment();
+	obj.numeroVenda.appendChild(document.createTextNode(obj.numero + ' (' + obj.tipo + ')'));
+	if (typeof(obj.numeroPedidoOrigem) != 'undefined' && obj.numeroPedidoOrigem != null) {
+		obj.numeroVenda.appendChild(document.createElement('br'));
+		obj.numeroVenda.appendChild(document.createTextNode(obj.numeroPedidoOrigem + ' (Venda)'));
+	}
+	obj.linkRemessa = document.createElement('a');
+	obj.linkRemessa.href = 'integracoes.logisticas.php#edit/' + (obj.idPlp || '');
+	obj.linkRemessa.text = (obj.descricaoRemessa || '');
+	obj.iconeIntegracao = document.createDocumentFragment();
+	var icon = document.createElement('span');
+		icon.className = 'icone ' + obj.classeIcone;
+		icon.title = obj.tipoIntegracaoInfo;
+	var span = document.createElement('span');
+	span.className = 'hidden-mobile';
+	span.textContent = obj.descricaoIntegracao;
+	obj.iconeIntegracao.appendChild(icon);
+	obj.iconeIntegracao.appendChild(span);
+	obj.iconSituacao = LogisticFactory.create('Logistic').getObjectStatus(obj.situacaoEvento).situacaoHtml;
+	obj.etiqueta = LogisticIntegration.getTrackingCode(obj);
+	obj.valorDeclarado = (obj.valorDeclarado && obj.valorDeclarado != '0.00') ? float2moeda(obj.valorDeclarado) : '-';
+	this.markers(obj);
+};
+IntegrationBase.prototype.markers = function(obj) {
+	obj.markers = document.createDocumentFragment();
+	obj.markers.appendChild(LogisticIntegration.getEmailIcon(obj.dataEnvioCodRastro));
+};
+IntegrationBase.prototype.updateButtonTitle = function(button, title) {
+	var box = $('#'+button);
+		box.show().attr('title',title);
+	var textBox = box.find('.action-text');
+	textBox.text(title);
+	textBox.attr('data-original-title', title);
+};
+IntegrationBase.prototype.initFormObj = function(show) {
+	$('#link_servicos_adicionais, #info_dimensao, #suspenderEntrega, #botaoObterPontosRetirada').hide();
+	$('#info_dimensao').html('Serão enviadas as dimensões mínimas, caso não sejam preenchidas.');
+	$('#tipoObjeto').attr('readonly', false);
+	$('#mp-box, #ar-box').show();
+	$(show).show();
+};
+IntegrationBase.prototype.showObjectLocation = function(locations) {
+	var content = '';
+	if (locations.origem) {
+		content += 'De ' + locations.origem + ' ';
+	}
+	if (locations.destino) {
+		content += 'Para ' + locations.destino;
+	}
+	if (content == '') {
+		content = 'N/A';
+	}
+	$('label[for="localizacao"]').html('Localização');
+	return content;
+};
+IntegrationBase.prototype.getDefaultMenus = function (menus) {
+	var contextMenu = {
+		'Lista detalhada': { //im_3
+			permissions: function(data) {
+				return data.situacao == 1;
+			},
+			icon: 'fas fa-print',
+			action : function(data) {
+				imprimirRelatorioPlp([data.id], 'listaPostagem');
+			}
+		},
+		Enviar : { //im_5 //im_10
+			permissions: function(data) {
+				return (data.situacao == 0 );
+			},
+			action : function(data) {
+				abrirPopupFecharPlp(data.id);
+			},
+			icon: 'fas fa-truck'
+		},
+		'Solicitar coleta' : { //im_6
+			permissions: function(data) {
+				return data.situacao == 1;
+			},
+			action : function(data) {
+				alterarSituacaoRemessas([data.id], 2);
+			},
+			icon: 'fas fa-truck-loading'
+		},
+		'Enviar NFE' : { //im_9
+			permissions: function(data) {
+				return data.situacao == 1;
+			},
+			action : function(data) {
+				enviarNFE([data.id]);
+			},
+			icon: 'fas fa-clipboard-check'
+		},
+		'Cancelar pedido' : { //im_11
+			permissions: function(data) {
+				return data.situacao == 1;
+			},
+			action : function(data) {
+				abrirPopupCancelarRemessaPostagem(data.id);
+			},
+			icon: 'fas fa-window-close' //color: #DD6F77; padding-right: 10px;
+		},
+		'Imprimir' : {
+			permissions: function(data) {
+				return data.situacao == 1;
+			},
+			action : function(data) {
+				imprimirEtiquetasRemessa(data.id);
+			},
+			icon: 'fas fa-print'
+		}
+	};
+	for (var i in menus) {
+		var index = menus[i];
+		var props = [];
+		if (typeof menus[i] != 'string') {
+			for (index in menus[i]) {
+				props = menus[i][index];
+			}
+		}
+		if (contextMenu[index]) {
+			this.contextMenu[index] = contextMenu[index];
+		}
+		if (props.text) {
+			this.contextMenu[props.text] = this.contextMenu[index];
+			delete this.contextMenu[index];
+			index = props.text;
+			delete props.text;
+		}
+		for (var prop in props) {
+			this.contextMenu[index][prop] = props[prop];
+		}
+	}
+};
+IntegrationBase.prototype.getContextMenu = function(menus) {
+	this.contextMenu = this.contextMenu || [];
+	this.getDefaultMenus(menus);
+	this.contextMenu.Excluir =  {
+		permissions: function(data) {
+			return (data.situacao == 0 || data.situacao == -1 || data.service -3);
+		},
+		icon: 'fas fa-trash-alt',
+		action: function(data) {
+			excluirPlps([data.id]);
+		}
+	};
+	return { menus: [ this.contextMenu ]};
+};
+IntegrationBase.prototype.initFormObjectShipment = function() {
+	$(document).off('click', '.act-imprimir-etiquetas');
+	$('.act-imprimir-etiquetas').attr('class', 'dropdown-item drop-item act-imprimir-etiquetas object-selected-only');
+	var top = document.getElementById('top-counter');
+	if (top) {
+		top.className = 'mdc-layout-grid__cell mdc-layout-grid__cell--span-2-phone mdc-layout-grid__cell--span-8-desktop';
+	}
+};
+IntegrationBase.prototype.updateFormObjectTracking = function(obj) {
+	$('#idObjetoPlp').val(obj.id);
+	$('#objServico').val(obj.nomeServico);
+	$('#numeroPedidoLoja').val(obj.numeroLoja);
+	if (obj.idIntegracao > 0) {
+		$('#descricaoIntegracao').val(obj.descricaoIntegracao);
+	} else {
+		$('#descricaoIntegracao').val('Correios Faixa');
+	}
+	$('#link_acompanhamento_correios').unbind('mousedown');
+	$('#link_acompanhamento_correios').attr('target', '_blank').show();
+	$('#botaoSincronizarRastro').show();
+	$('#consultaRastroCorreios input').remove();
+};
+//todo remover o IF e usar um retorno com os nomes dos botões e filtros de cada contexto apenas exibindo e ocultado seu ítem
+IntegrationBase.prototype.resetFilters = function(view) {
+	var filtrosPlp = '#box_filtro_situacao_plp, #box_filtro_outros_plp';
+	var filtrosObjetos = '#box_filtro_situacao_obj, #box_filtro_outros_obj, #opc-data-saida, #opc-data-rastro, #box_ordenacao_obj, .separator_obj, #box_psq_customizada_obj';
+	if (view == 'plp') {
+		$(filtrosPlp).show();
+		$(filtrosObjetos).hide();
+		return;
+	}
+	$(filtrosPlp).hide();
+	$(filtrosObjetos).show();
+};
+IntegrationBase.prototype.getFiltersShipmentList = function(filtersAvaliable) {
+	$('#filtro-situacao option').each(function() {
+		fieldStatus = $(this).attr('value');
+		if (filtersAvaliable.indexOf(fieldStatus) != -1 || fieldStatus == '') {
+			$(this).show();
+		} else {
+			$(this).hide();
+		}
+	});
+	this.resetFilters('plp');
+	$('#psqTipoLog').val('');
+	$('#box_psq_tipo_log').hide();
+};
+IntegrationBase.prototype.getFiltersObjectList = function() {
+	this.resetFilters('objetos');
+};
+//todo set a default text in a buttons and remove a specific points of this
+IntegrationBase.prototype.resetActions = function(view) {
+	var visivelPlp = '#box_btn_fechar_plp, #box_btn_pronto_envio, #box_btn_despachado, #box_btn_excluir_plp, #incluirPlp, #box_btn_enviar_xml_nfe, #box_btn_imprimir_docs, #box_btn_solicitar_coleta, #box_btn_imprimir_plp';
+	var visivelObjeto = '#box_btn_gerar_plp, #box_btn_vincular_remessa, #box_btn_enviar_rastreamentos_email';
+	if (view == 'plp') {
+		$(visivelObjeto).hide();
+		$(visivelPlp).show();
+		return;
+	}
+	$(visivelObjeto).show();
+	$(visivelPlp).hide();
+};
+IntegrationBase.prototype.getActionsShipmentList = function() {
+	this.resetActions('plp');
+	$('#listaPlps .button-navigate').show();
+	$('#box_btn_imprimir_etiqueta, #box_btn_enviar_xml_nfe, #box_btn_solicitar_coleta, #box_btn_imprimir_plp, #box_btn_estoque_confirma, #box_btn_disponibilidade_estoque').hide();
+};
+IntegrationBase.prototype.getActionsObjectList = function() {
+	this.resetActions('objetos');
+	$('#box_btn_imprimir_etiqueta, #box_btn_vincular_remessa').hide();
+	$('#tab-shipments').show();
+	$("#filtro-situacao-objeto option[value='5']").show();
+};
+IntegrationBase.prototype.initFormSendShipmentOrder = function(title, btnTxt) {
+	$('span.ui-dialog-title').text(title);
+	$('button.button-default span.ui-button-text').text(btnTxt);
+};
+IntegrationBase.prototype.allowCustomTracking = function() {
+	return false;
+};
+IntegrationBase.prototype.hasQuotationMethod = function() {
+	return true;
+};
+IntegrationBase.prototype.disableAddVolumeButton = function() {
+	return false;
+};
+IntegrationBase.prototype.initQuotationForm = function(addBtnPickup) {
+	$('#cotacaoAr, #cotacaoMp, #cotacaoTipoObjeto, #cotacaoValorDeclarado, #cotacaoDiametro, #cotacaoTotalProdutos, #cotacaoFretePorConta').hide();
+	if (addBtnPickup) {
+		$('#btnObterCotacoes').removeClass('col-xs-offset-8 col-sm-offset-8');
+		$('#btnObterPontosRetirada').show();
+	}
+};
+IntegrationBase.prototype.updateObjectType = function() {
+	return false;
+};
+IntegrationBase.prototype.externalLabel = function() {
+	return false;
+};
+IntegrationBase.prototype.individualLabelPrint = function() {
+	return false;
+};
+IntegrationBase.prototype.getOptsChangeShippingStatus = function(status) {
+	return {};
+};
+IntegrationBase.prototype.preValidateShipmentOrder = function() {
+	return [];
+};
+IntegrationBase.prototype.displaySendShipmentOrderMessage = function(integrationRes) {
+	var errors = $('<div>');
+	$.each(integrationRes, function(key, res) {
+		if (typeof(res.response.remessa) !== 'undefined') {
+			errors.append(
+				$('<h3>', { class: 'alert-box-title', text: '"' + res.response.remessa + '" possui erros:' })
+			);
+		}
+		var msg = res.response.msg;
+		if (typeof msg === 'string') {
+			msg = [msg];
+		}
+		var errorsList = $('<ul>', { class: 'margin_top10' });
+		$.each(msg, function (i, val) {
+			errorsList.append(
+				$('<li>', { html: val })
+			);
+		});
+		errors.append(errorsList);
+	});
+	return errors;
+};
+IntegrationBase.prototype.msgSuccessSendShipmentOrder = function() {};
+IntegrationBase.prototype.getDynamicFilters = function(filters) {
+	var allDynamicFilters = {
+		'valorDeclaradoMin': {
+			'label': 'VD a partir de',
+			'type': 'text'
+		},
+		'valorDeclaradoIgual': {
+			'label': 'VD igual a',
+			'type': 'text'
+		},
+		'valorDeclaradoMax': {
+			'label': 'VD até',
+			'type': 'text'
+		},
+		'avisoRecebimento': {
+			'label': 'AR',
+			'type': 'select',
+			'options': {
+				'1': 'Ativo',
+				'0': 'Inativo'
+			}
+		},
+		'maoPropria': {
+			'label': 'MP',
+			'type': 'select',
+			'options': {
+				'1': 'Ativo',
+				'0': 'Inativo'
+			}
+		},
+		'servico': {
+			'label': 'Serviço',
+			'type': 'select',
+			'options': {}
+		}
+	};
+
+	var returnFilters = {};
+
+	if (Array.isArray(filters)) {
+		for (var key in filters) {
+			if (filters.hasOwnProperty(key)) {
+				var filterName = filters[key];
+
+				if (filterName in allDynamicFilters) {
+					returnFilters[filterName] = allDynamicFilters[filterName];
+				}
+			}
+		}
+	} else {
+		returnFilters['servico'] = allDynamicFilters['servico'];
+	}
+
+	return returnFilters;
+};
+IntegrationBase.prototype.getFieldsDatatableObject = function() {
+	return [
+		'numero',
+		'remessa',
+		'cliente',
+		'integracao',
+		'servico',
+		'etiqueta',
+		'valorDeclarado',
+		'situacao',
+		'marcadores'
+	];
+};
+IntegrationBase.prototype.updateFormConfiguration = function() {
+	$('.bubble-info > h5').text('Integração ' + $('#tipoIntegracao option:selected').text());
+
+	var guideUrl = 'https://ajuda.bling.com.br/hc/pt-br/';
+	guideUrl += this.GUIDE_ID ? 'articles/' + this.GUIDE_ID : 'sections/360006250893';
+	$('.bubble-info > a').attr('href', guideUrl);
+}
+
+var LogisticIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+LogisticIntegration.prototype = Object.create(IntegrationBase.prototype);
+LogisticIntegration.prototype.constructor = LogisticIntegration;
+LogisticIntegration.prototype.clearFormShipmentActions = function() {
+	$('#listaPlps .button-navigate, #box_btn_gerar_plp, #box_btn_fechar_plp, #box_btn_pronto_envio, #box_btn_despachado, #box_btn_enviar_xml_nfe, #box_btn_solicitar_coleta').hide();
+};
+LogisticIntegration.prototype.getObjectStatus = function(statusCode) {
+	var situacaoInfo;
+	var situacaoHtml = document.createElement('span');
+	situacaoHtml.className = 'fas fa-circle';
+	switch(parseInt(statusCode)) {
+		case 0:
+			situacaoInfo = 'Objeto postado';
+			situacaoHtml.className += ' fa-circle-yellow';
+			situacaoHtml.title = situacaoInfo;
+			break;
+		case 1:
+			situacaoInfo = 'Em andamento';
+			situacaoHtml.className += ' fa-circle-blue';
+			situacaoHtml.title = situacaoInfo;
+			break;
+		case 2:
+			situacaoInfo = 'Não Entregue';
+			situacaoHtml.className += ' fa-circle-red';
+			situacaoHtml.title = situacaoInfo;
+			break;
+		case 3:
+			situacaoInfo = 'Entregue';
+			situacaoHtml.className += ' fa-circle-green';
+			situacaoHtml.title = situacaoInfo;
+			break;
+		case 4:
+			situacaoInfo = 'Aguardando retirada';
+			situacaoHtml.className += ' fa-circle-orange';
+			situacaoHtml.title = situacaoInfo;
+			break;
+		default:
+			situacaoInfo = 'Não Postado';
+			situacaoHtml.className += ' fa-circle-gray';
+			situacaoHtml.title = situacaoInfo;
+			break;
+	}
+	return {'situacaoInfo' : situacaoInfo, 'situacaoHtml': situacaoHtml};
+};
+LogisticIntegration.prototype.getShipmentStatus = function(statusCode) {
+	var situacaoInfo = '';
+	var situacaoHtml = document.createElement('span');
+	var createCircle = function(className, title) {
+		situacaoHtml.className = 'fas fa-circle fa-circle-' + className;
+		situacaoHtml.title = title;
+	};
+	switch(parseInt(statusCode)) {
+		case -3:
+			situacaoInfo = 'A ser corrigida';
+			createCircle('gray', 'Com erros');
+			break;
+		case -2:
+			situacaoInfo = 'Em processamento';
+			createCircle('orange', situacaoInfo);
+			break;
+		case -1:
+			situacaoInfo = 'Cancelado';
+			createCircle('red', situacaoInfo);
+			break;
+		case 0:
+			situacaoInfo = 'Em aberto';
+			createCircle('yellow', situacaoInfo);
+			break;
+		case 1:
+			situacaoInfo = 'Emitida';
+			createCircle('green', situacaoInfo);
+			break;
+		case 2:
+			situacaoInfo = 'Pronto para envio';
+			createCircle('pink', situacaoInfo);
+			break;
+		case 3:
+			situacaoInfo = 'Despachado';
+			createCircle('blue', situacaoInfo);
+			break;
+		case 4:
+			situacaoInfo = 'Pronto para envio';
+			createCircle('blue', situacaoInfo);
+			break;
+		default:
+			break;
+	}
+	return {'situacaoInfo' : situacaoInfo, 'situacaoHtml': situacaoHtml};
+};
+LogisticIntegration.getEmailIcon = function(dataEnvioCodRastro) {
+	if (!dataEnvioCodRastro) {
+		return document.createTextNode('');
+	}
+	var span = document.createElement('span');
+		span.title = 'Código de rastreio enviado em ' + formatDate(dataEnvioCodRastro);
+		span.className = 'icon-envelope';
+		span.alt = span.title;
+	return span;
+};
+LogisticIntegration.getTrackingCode = function(obj) {
+	return (obj.codigoEtiqueta.length == 0 ? 'N/A' : obj.prefixoServico + obj.codigoEtiqueta + obj.nacionalidade);
+};
+LogisticIntegration.initLabelPrint = function() {
+	var rotulosSelecionados = verificarImpressaoSelecionados();
+
+	if (rotulosSelecionados !== false) {
+		printWin = window.open('./impressao/etiquetasEnvio.php', '_blank');
+		printWin.onload = function () {
+			imprimirRotulosSelecionados('etiquetaExterna', rotulosSelecionados);
+		};
+	}
+};
+
+var CorreiosIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+CorreiosIntegration.prototype = Object.create(IntegrationBase.prototype);
+CorreiosIntegration.prototype.constructor = CorreiosIntegration;
+CorreiosIntegration.prototype.TITLE_ERROR_FIELD = 'Dados SIGEP WEB';
+CorreiosIntegration.prototype.TITLE_SEND_SHIPMENT = 'Envio de PLP';
+CorreiosIntegration.prototype.GUIDE_ID = '360035956074';
+CorreiosIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList.call(this);
+};
+CorreiosIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList.call(this);
+	$('#box_btn_vincular_remessa').show();
+};
+CorreiosIntegration.prototype.markers = function(obj) {
+	IntegrationBase.prototype.markers.call(this, obj);
+	obj.markers.appendChild(CorreiosIntegration.getServiceIcon(obj));
+};
+CorreiosIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj('#link_servicos_adicionais, #info_dimensao, #suspenderEntrega');
+	$('#info_dimensao').html('Serão enviadas as dimensões mínimas, padrão dos Correios, caso não sejam preenchidas.');
+};
+CorreiosIntegration.prototype.getContextMenu = function() {
+	this.contextMenu = [];
+	this.contextMenu['Fechar PLP'] = { //im_1
+		permissions: function(data) {
+			return data.situacao == 0;
+		},
+		icon: 'images/integracoes-logisticas/cinza/correios.svg',
+		action: function (data) {
+			abrirPopupFecharPlp(data.id);
+		}
+	};
+	IntegrationBase.prototype.getContextMenu.call(this,['Lista detalhada']);
+	this.contextMenu.Voucher = { //im_2
+		permissions : function(data) {
+			return data.situacao == 1;
+		},
+		icon: 'fas fa-print',
+		action: function(data) {
+			imprimirRelatorioPlp([data.id], 'voucher');
+		}
+	};
+	return { menus: [ this.contextMenu ]};
+};
+CorreiosIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-ars, .act-imprimir-discriminacao-conteudo, .act-imprimir-voucher, .act-imprimir-lista-det', $('#div_side_acoes')).show();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-logistica cinza correios').show();
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		verificarImpressaoSelecionados('etiqueta', true);
+		return false;
+	});
+};
+CorreiosIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	var tracking = obj.prefixoServico+obj.codigoEtiqueta+obj.nacionalidade;
+	$('#objEtiqueta').val(tracking);
+	$('#link_acompanhamento_correios').removeAttr('target');
+	$('#consultaRastroCorreios').attr('action', 'https://www2.correios.com.br/sistemas/rastreamento/ctrl/ctrlRastreamento.cfm?').append(
+		$('<input>', { 'type': 'hidden', 'name': 'objetos', 'value': tracking })
+	);
+
+	$('#link_acompanhamento_correios').mousedown(function(e) {
+		e.preventDefault();
+		$('#consultaRastroCorreios').submit();
+	});
+};
+CorreiosIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1']);
+	$('#box_filtro_outros_plp').hide();
+};
+CorreiosIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	this.updateButtonTitle('box_btn_fechar_plp','Fechar PLP\'s');
+	$('#box_btn_imprimir_docs').show();
+	$('#box_btn_pronto_envio, #box_btn_despachado').hide();
+};
+CorreiosIntegration.prototype.initFormSendShipmentOrder = function() {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Fechar PLP', 'Fechar PLP');
+
+	var btnOk = $('#popup_container_fecharplp').closest('.ui-dialog').find('.ui-button').eq(1);
+	btnOk.attr('disabled', true).addClass('button-default-disabled');
+
+	$('#declaracao_postagem_correios').click(function() {
+		if ($(this).is(':checked')) {
+			btnOk.attr('disabled', false).removeClass('button-default-disabled');
+			$('#declaracao_postagem_correios').parent().removeClass('input-checkbox-error');
+		} else {
+			btnOk.attr('disabled', true).addClass('button-default-disabled');
+			$('#declaracao_postagem_correios').parent().addClass('input-checkbox-error');
+		}
+	});
+	if (storageAvailable('localStorage')) {
+		var opcoesFecharPlp = localStorage.getItem('opcoes_fechar_plp');
+		if (opcoesFecharPlp) {
+			var arOpcoesFecharPlp = opcoesFecharPlp.split(',');
+			$.each(arOpcoesFecharPlp, function (key, value) {
+				if (value == 'declaracao_postagem_correios') {
+					$('#' + value).click();
+				}
+				$('#' + value).prop('checked', true);
+			});
+		}
+	}
+};
+CorreiosIntegration.getServiceIcon = function(service) {
+	var content = document.createDocumentFragment();
+	if (service.ar == 1) {
+		var arIcon = document.createElement('img');
+			arIcon.title = 'Aviso de Recebimento';
+			arIcon.src = 'images/aviso-recebimento.svg';
+		content.appendChild(arIcon);
+	}
+	if (service.mp == 1) {
+		var mpIcon = document.createElement('img');
+			mpIcon.title = 'Mão Própria';
+			mpIcon.src = 'images/mao-propria.svg';
+		content.appendChild(mpIcon);
+	}
+	return content;
+};
+CorreiosIntegration.prototype.initQuotationForm = function() {
+	IntegrationBase.prototype.initQuotationForm.call();
+	$('#cotacaoAr, #cotacaoMp, #cotacaoTipoObjeto, #cotacaoValorDeclarado, #cotacaoDiametro').show();
+};
+CorreiosIntegration.prototype.updateObjectType = function(objectType) {
+	switch(objectType) {
+		case '001':
+			$('#cotacaoLargura, #cotacaoAltura, #cotacaoComprimento, #cotacaoDiametro').hide();
+			$('#larguraCotacao, #alturaCotacao, #comprimentoCotacao, #diametroCotacao').val(0);
+			break;
+		case '002':
+			$('#cotacaoLargura, #cotacaoAltura, #cotacaoComprimento').show();
+			$('#cotacaoDiametro').hide();
+			$('#diametroCotacao').val(0);
+			break;
+		case '003':
+			$('#cotacaoComprimento, #cotacaoDiametro').show();
+			$('#cotacaoLargura, #cotacaoAltura').hide();
+			$('#larguraCotacao, #alturaCotacao').val(0);
+			break;
+	}
+};
+CorreiosIntegration.prototype.preValidateShipmentOrder = function() {
+	var errors = [];
+	var quantCarta = 0;
+	var codsCarta = ['10154', '10065', '10138', '10707', '12556'];
+	$('input[name="etiquetas[]"]').each(function() {
+		var codServico = $(this).parent().parent().attr('data-correios-codservico');
+		if (codsCarta.indexOf(codServico) != -1) {
+			quantCarta += 1;
+		}
+	});
+	if (quantCarta != $('input[name="etiquetas[]"]').length && quantCarta > 0) {
+		errors.push("Os Correios não permitem o fechamento de PLP's com serviços de carta juntamente com objetos registrados. Deverá ser efetuado separadamente.");
+	}
+	return errors;
+};
+CorreiosIntegration.prototype.getDynamicFilters = function() {
+	var filters = [
+		'valorDeclaradoMin',
+		'valorDeclaradoIgual',
+		'valorDeclaradoMax',
+		'avisoRecebimento',
+		'maoPropria',
+		'servico'
+	];
+	return IntegrationBase.prototype.getDynamicFilters.call(this, filters)
+};
+
+var IntelipostIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+IntelipostIntegration.prototype = Object.create(IntegrationBase.prototype);
+IntelipostIntegration.prototype.constructor = IntelipostIntegration;
+IntelipostIntegration.prototype.GUIDE_ID = '360047026893';
+IntelipostIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj('#link_dimensoes');
+};
+IntelipostIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this,[
+		{ 'Enviar' : { icon: 'images/integracoes-logisticas/cinza/intelipost.svg'} },
+		{ 'Solicitar coleta' : { text: 'Pronto para envio' } }
+	]);
+	this.contextMenu.Despachado = {
+		permissions: function(data) {
+			return (data.situacao == 1 || data.situacao == 2 );
+		},
+		icon: 'fas fa-calendar-check',
+		action: function(data) {
+			alterarSituacaoRemessas([data.id], 3);
+		}
+	};
+	this.contextMenu.Cancelar = {
+		permissions: function(data) {
+			return (data.situacao == 2 || data.situacao ==3);
+		},
+		icon: 'fas fa-trash-alt',
+		action : function(data) {
+			alterarSituacaoRemessas([data.id], -1);
+		}
+	};
+	return { menus: [ this.contextMenu ]};
+};
+IntelipostIntegration.prototype.getFiltersObjectShipment = function() {
+	IntegrationBase.prototype.getFiltersObjectShipment.call(this, arguments);
+};
+IntelipostIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-ars, .act-imprimir-discriminacao-conteudo, .act-imprimir-voucher, .act-imprimir-lista-det, .act-desvincular-objetos', $('#div_side_acoes')).hide();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-logistica cinza intelipost').show();
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		LogisticIntegration.initLabelPrint();
+		return false;
+	});
+};
+IntelipostIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').attr('href', 'https://status.ondeestameupedido.com/tracking/' + obj.confAutenticacao.codigoCliente + '/' + (obj.numeroPlp || 0));
+};
+IntelipostIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1', '2', '3', '-1']);
+	$('#box_filtro_outros_plp').show();
+};
+IntelipostIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList.call(this);
+};
+IntelipostIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	$('#box_btn_pronto_envio, #box_btn_despachado').show();
+	$('#box_btn_imprimir_docs').hide();
+};
+IntelipostIntegration.prototype.initFormSendShipmentOrder = function() {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Enviar Remessa', 'Enviar');
+	$('#box_acoes_correios').empty().html('<p>Deseja enviar a remessa de postagem para sua integração Intelipost?</p>');
+};
+IntelipostIntegration.prototype.initQuotationForm = function() {
+	IntegrationBase.prototype.initQuotationForm.call();
+	$('#cotacaoTipoObjeto, #cotacaoTotalProdutos').show();
+};
+IntelipostIntegration.prototype.externalLabel = function() {
+	return true;
+};
+IntelipostIntegration.prototype.individualLabelPrint = function() {
+	return true;
+};
+IntelipostIntegration.prototype.getOptsChangeShippingStatus = function(status) {
+	switch(status) {
+		case -1:
+			return {
+				description: 'A remessa será cancelada na Intelipost.',
+				msgLoading: 'Cancelando a remessa, aguarde...'
+			};
+		case 2:
+			return {
+				description: 'A remessa será atualizada para "pronta para envio" na Intelipost.',
+				msgLoading: 'Marcando a remessa como pronto para envio, aguarde...'
+			};
+		case 3:
+			return {
+				description: 'A remessa será atualizada para "despachada" na Intelipost.',
+				msgLoading: 'Marcando a remessa como despachada, aguarde...'
+			};
+		default:
+			return {};
+	}
+};
+IntelipostIntegration.prototype.getFieldsDatatableObject = function() {
+	return [
+		'numero',
+		'remessa',
+		'cliente',
+		'integracao',
+		'servico',
+		'etiqueta',
+		'situacao',
+		'marcadores'
+	];
+};
+
+var CustomLogisticIntegration = function() {
+	CorreiosIntegration.apply(this, arguments);
+};
+CustomLogisticIntegration.prototype = Object.create(CorreiosIntegration.prototype);
+CustomLogisticIntegration.prototype.hideBtnTrackingSync = true;
+CustomLogisticIntegration.prototype.GUIDE_ID = '360036471693';
+CustomLogisticIntegration.prototype.getFiltersObjectList = function() {
+	CorreiosIntegration.prototype.getFiltersObjectList();
+};
+CustomLogisticIntegration.prototype.getActionsObjectList = function() {
+	CorreiosIntegration.prototype.getActionsObjectList();
+	$('#box_btn_vincular_remessa, #box_btn_imprimir_etiqueta, #box_btn_gerar_plp').show();
+};
+CustomLogisticIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#botaoSincronizarRastro').hide();
+	var url = obj.rastreamento.url;
+	if (url == null || url.length == 0) {
+		$('#link_acompanhamento_correios').hide();
+	} else {
+		$('#link_acompanhamento_correios').attr('href', url);
+	}
+};
+CustomLogisticIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this,[
+		{
+			'Lista detalhada' : {
+				permissions : function(data) {
+					return data.situacao == 0;
+				}
+			}
+		}
+	]);
+	return { menus: [ this.contextMenu ]};
+};
+CustomLogisticIntegration.prototype.getFiltersShipmentList = function () {
+	CorreiosIntegration.prototype.getFiltersShipmentList();
+};
+CustomLogisticIntegration.prototype.getActionsShipmentList = function () {
+	CorreiosIntegration.prototype.getActionsShipmentList();
+	$('#box_btn_pronto_envio, #box_btn_despachado, #box_btn_fechar_plp').hide();
+	$('#box_btn_fechar_plp').hide();
+	$('#box_psq_tipo_log, #box_btn_imprimir_docs').show();
+};
+CustomLogisticIntegration.prototype.initFormObj = function() {
+	CorreiosIntegration.prototype.initFormObj.call(this, arguments);
+	$('#suspenderEntrega').hide();
+};
+CustomLogisticIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-discriminacao-conteudo, .act-imprimir-lista-det', $('#div_side_acoes')).show();
+	$('.act-imprimir-ars, .act-imprimir-voucher', $('#div_side_acoes')).hide();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-print').show();
+	$('.act-salvar-fecharPlp').hide();
+	var fTitle = document.getElementById('fixed-title');
+	var size = 'mdc-layout-grid__cell mdc-layout-grid__cell--span-12-tablet mdc-layout-grid__cell--span-8-desktop';
+	if ($('#botaoSalvar').is(':hidden')) {
+		size = 'mdc-layout-grid__cell mdc-layout-grid__cell--span-12-tablet mdc-layout-grid__cell--span-10-desktop';
+	}
+	fTitle.className = size;
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		verificarImpressaoSelecionados('etiqueta', true);
+		return false;
+	});
+};
+CustomLogisticIntegration.prototype.allowCustomTracking = function() {
+	return true;
+};
+CustomLogisticIntegration.prototype.hasQuotationMethod = function() {
+	return false;
+};
+
+var CorreiosLogIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+CorreiosLogIntegration.prototype = Object.create(IntegrationBase.prototype);
+CorreiosLogIntegration.prototype.constructor = CorreiosLogIntegration;
+CorreiosLogIntegration.prototype.TITLE_ERROR_FIELD = 'Dados Correios Log';
+CorreiosLogIntegration.prototype.GUIDE_ID = '360046391334';
+CorreiosLogIntegration.prototype.markers = function(obj) {
+	IntegrationBase.prototype.markers.call(this, obj);
+	obj.markers.appendChild(LogisticIntegration.getEmailIcon(obj.dataEnvioCodRastro));
+};
+CorreiosLogIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj('#link_servicos_adicionais');
+};
+CorreiosLogIntegration.prototype.initFormSendShipmentOrder = function() {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Enviar Remessa', 'Enviar');
+	$('#box_acoes_correios').empty().html('<p>Deseja enviar a remessa de pedidos para sua integração Correios Log?</p>');
+};
+CorreiosLogIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this,[
+		{ Enviar : { icon:  'images/integracoes-logisticas/cinza/correioslog.svg'}},
+		'Enviar NFE'
+	]);
+	return { menus: [ this.contextMenu ]};
+};
+CorreiosLogIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-ars, .act-imprimir-discriminacao-conteudo, .act-imprimir-voucher, .act-imprimir-lista-det, .act-imprimir-etiquetas, .act-desvincular-objetos', $('#div_side_acoes')).hide();
+};
+CorreiosLogIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').unbind('mousedown').mousedown(function(e) {
+		e.preventDefault();
+		$('#consultaRastroCorreios input[name="objetos"]').val(LogisticIntegration.getTrackingCode(obj));
+		$('#consultaRastroCorreios').submit();
+	});
+};
+CorreiosLogIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1']);
+	$('#box_filtro_outros_plp').show();
+};
+CorreiosLogIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	$('#box_btn_enviar_xml_nfe').show();
+	this.updateButtonTitle('box_btn_fechar_plp','Enviar remessas');
+	$('#box_btn_enviar_xml_nfe').show();
+	$('#box_btn_pronto_envio, #box_btn_despachado, #box_btn_imprimir_docs').hide();
+};
+CorreiosLogIntegration.prototype.initQuotationForm = function() {
+	CorreiosIntegration.prototype.initQuotationForm.call();
+};
+CorreiosLogIntegration.prototype.hasQuotationMethod = function() {
+	return false;
+};
+CorreiosLogIntegration.prototype.getDynamicFilters = function() {
+	var filters = [
+		'valorDeclaradoMin',
+		'valorDeclaradoIgual',
+		'valorDeclaradoMax',
+		'avisoRecebimento',
+		'maoPropria',
+		'servico'
+	];
+	return IntegrationBase.prototype.getDynamicFilters.call(this, filters)
+};
+
+var MercadoEnviosIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+MercadoEnviosIntegration.prototype = Object.create(IntegrationBase.prototype);
+MercadoEnviosIntegration.prototype.constructor = MercadoEnviosIntegration;
+MercadoEnviosIntegration.prototype.GUIDE_ID = '360047027253';
+MercadoEnviosIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList();
+};
+MercadoEnviosIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_gerar_plp, #box_btn_vincular_remessa').hide();
+	$('#box_btn_imprimir_etiqueta').show();
+	$('#tab-shipments').hide();
+	$("#filtro-situacao-objeto option[value='5']").hide();
+};
+MercadoEnviosIntegration.prototype.markers = function(obj) {
+	IntegrationBase.prototype.markers.call(this, obj);
+	if (obj.fulfillment == 1) {
+		var img = document.createElement('img');
+			img.title = 'Modo de operação Fulfillment';
+			img.alt = 'Modo de operação Fulfillment';
+			img.src = 'images/icon-fulfillment.png';
+		obj.markers.appendChild(img);
+	}
+};
+MercadoEnviosIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj();
+};
+MercadoEnviosIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this,['Enviar NFE']);
+	return { menus: [ this.contextMenu ]};
+};
+MercadoEnviosIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-ars, .act-imprimir-discriminacao-conteudo, .act-imprimir-voucher, .act-imprimir-lista-det, .act-imprimir-etiquetas, .act-desvincular-objetos', $('#div_side_acoes')).hide();
+};
+MercadoEnviosIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').hide();
+};
+MercadoEnviosIntegration.prototype.getFiltersShipmentList = function() {
+	filtersAvaliable = ['0', '1', '4'];
+	IntegrationBase.prototype.getFiltersShipmentList(filtersAvaliable);
+	$('#box_filtro_outros_plp,#box_psq_tipo_log').show();
+};
+MercadoEnviosIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList.call(this);
+
+};
+MercadoEnviosIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	$('#box_btn_pronto_envio, #box_btn_despachado, #box_btn_imprimir_docs, #box_btn_fechar_plp').hide();
+	$('#tab-objects a, #tab-objects').click();
+};
+MercadoEnviosIntegration.prototype.hasQuotationMethod = function() {
+	return false;
+};
+MercadoEnviosIntegration.prototype.externalLabel = function() {
+	return true;
+};
+MercadoEnviosIntegration.prototype.individualLabelPrint = function() {
+	return true;
+};
+MercadoEnviosIntegration.prototype.getFieldsDatatableObject = function() {
+	return [
+		'numero',
+		'cliente',
+		'integracao',
+		'servico',
+		'etiqueta',
+		'situacao',
+		'marcadores'
+	];
+};
+
+var TotalExpressIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+TotalExpressIntegration.prototype = Object.create(IntegrationBase.prototype);
+TotalExpressIntegration.prototype.constructor = TotalExpressIntegration;
+TotalExpressIntegration.prototype.TITLE_ERROR_FIELD = 'Validação de coleta Total Express';
+TotalExpressIntegration.prototype.GUIDE_ID = '360047026793';
+TotalExpressIntegration.prototype.TITLE_SEND_SHIPMENT = 'Envio de coleta Total Express';
+TotalExpressIntegration.prototype.hideBtnTrackingSync = true;
+TotalExpressIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList();
+};
+TotalExpressIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_imprimir_etiqueta, #box_btn_vincular_remessa').show();
+};
+TotalExpressIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj('#link_servicos_adicionais, #info_dimensao');
+	$('#mp-box, #ar-box').hide();
+};
+TotalExpressIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this, [
+		{ Enviar: { icon: 'images/integracoes-logisticas/cinza/totalexpress.svg' }},
+		'Lista detalhada'
+	]);
+	return { menus: [ this.contextMenu ]};
+};
+TotalExpressIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-ars, .act-imprimir-discriminacao-conteudo, #div_side_acoes .act-imprimir-voucher', $('#div_side_acoes')).hide();
+	$('#div_side_acoes .act-imprimir-lista-det').show();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-logistica cinza totalexpress').show();
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		verificarImpressaoSelecionados('etiqueta', true);
+		return false;
+	});
+};
+TotalExpressIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	var pedido = obj.id;
+	if (obj.confAutenticacao.tipoIdentificadorColeta != 0) {
+		pedido = (obj.confAutenticacao.tipoIdentificadorColeta == 1 ? obj.numero : obj.numeroLoja);
+	}
+	$('#botaoSincronizarRastro').hide();
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').attr('href', 'http://tracking.totalexpress.com.br/poupup_track.php?reid=' + obj.confAutenticacao.codigoEmpresa + '&pedido=' + pedido + '&nfiscal=' + obj.numero);
+};
+TotalExpressIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1']);
+	$('#box_filtro_outros_plp').hide();
+};
+TotalExpressIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	$('#box_btn_pronto_envio, #box_btn_despachado').hide();
+	this.updateButtonTitle('box_btn_fechar_plp','Enviar remessas');
+	$('#box_psq_tipo_log, #box_btn_imprimir_docs').show();
+};
+TotalExpressIntegration.prototype.initFormSendShipmentOrder = function() {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Enviar Remessa', 'Enviar');
+	$('#box_acoes_correios').empty().html('<p>Deseja enviar a remessa para sua integração Total Express?</p>');
+};
+TotalExpressIntegration.prototype.initQuotationForm = function() {
+	IntegrationBase.prototype.initQuotationForm.call();
+	$('#cotacaoValorDeclarado').show();
+};
+TotalExpressIntegration.prototype.displaySendShipmentOrderMessage = function(integrationRes) {
+	var errors = $('<div>');
+	$.each(integrationRes, function(key, res) {
+		if (typeof(res.response.remessa) !== 'undefined') {
+			errors.append(
+				$('<h3>', { class: 'alert-box-title', text: '"' + res.response.remessa + '" possui erros:' })
+			);
+		}
+		var msg = res.response.msg;
+		if (typeof msg === 'string') {
+			msg = [msg];
+		}
+		var errorsList = $('<ul>', { class: 'margin_top10' });
+		$.each(msg, function (i, val) {
+			errorsList.append(
+				$('<li>', { html: val })
+			);
+		});
+		var montarErrosEspecificos = function(orders, title) {
+			if (typeof(orders) !== 'undefined') {
+				$.each(orders, function(i, order) {
+					errorsList.append(
+						$('<li>', {	class: 'margin_top10', html: $('<strong>', { text: title + i }) })
+					);
+					var errorsListOrders = $('<ul>', { class: 'margin_top10' });
+					$.each(order, function(k, val) {
+						errorsListOrders.append(
+							$('<li>', {	html: val })
+						);
+					});
+					errorsList.append(errorsListOrders);
+				});
+			}
+		};
+		montarErrosEspecificos(res.response.nfes, 'NFe ');
+		montarErrosEspecificos(res.response.orders, 'Pedido ');
+		errors.append(errorsList);
+	});
+	return errors;
+};
+TotalExpressIntegration.prototype.getDynamicFilters = function() {
+	var filters = [
+		'valorDeclaradoMin',
+		'valorDeclaradoIgual',
+		'valorDeclaradoMax',
+		'servico'
+	];
+	return IntegrationBase.prototype.getDynamicFilters.call(this, filters)
+};
+TotalExpressIntegration.prototype.showObjectLocation = function(locations) {
+	$('label[for="localizacao"]').html('Observação');
+	return locations.origem;
+};
+
+var FrenetIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+FrenetIntegration.prototype = Object.create(IntegrationBase.prototype);
+FrenetIntegration.prototype.constructor = FrenetIntegration;
+FrenetIntegration.prototype.GUIDE_ID = '360046390114';
+FrenetIntegration.prototype.getFiltersObjectList = function () {
+	IntegrationBase.prototype.getFiltersObjectList();
+	$('#box_psq_tipo_log').hide();
+};
+FrenetIntegration.prototype.getActionsObjectList = function () {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_gerar_plp, #box_btn_vincular_remessa').hide();
+	$('#box_btn_imprimir_etiqueta').show();
+	$('#tab-shipments').hide();
+	$("#filtro-situacao-objeto option[value='5']").hide();
+};
+FrenetIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj('#info_dimensao');
+};
+FrenetIntegration.prototype.getContextMenu = function() {
+	var menus = IntegrationBase.prototype.getContextMenu.call(this);
+	return  menus;
+};
+FrenetIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('#div_side_acoes .act-imprimir-ars, .act-imprimir-discriminacao-conteudo, #div_side_acoes .act-imprimir-voucher, #div_side_acoes .act-imprimir-lista-det').hide();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-logistica cinza frenet').show();
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		verificarImpressaoSelecionados('etiqueta', true);
+		return false;
+	});
+};
+FrenetIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').hide();
+};
+FrenetIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1']);
+	$('#box_filtro_outros_plp').hide();
+	$('#box_psq_tipo_log').show();
+};
+FrenetIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList.call(this);
+};
+FrenetIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	$('#box_btn_pronto_envio, #box_btn_despachado, #box_btn_imprimir_docs, #box_btn_fechar_plp').hide();
+	$('#tab-objects a, #tab-objects').click();
+};
+FrenetIntegration.prototype.allowCustomTracking = function() {
+	return CustomLogisticIntegration.prototype.allowCustomTracking.call();
+};
+FrenetIntegration.prototype.initQuotationForm = function() {
+	IntegrationBase.prototype.initQuotationForm.call();
+	$('#cotacaoTotalProdutos').show();
+};
+FrenetIntegration.prototype.getFieldsDatatableObject = function() {
+	return [
+		'numero',
+		'cliente',
+		'integracao',
+		'servico',
+		'etiqueta',
+		'situacao',
+		'marcadores'
+	];
+};
+
+var B2WEntregaIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+B2WEntregaIntegration.prototype = Object.create(IntegrationBase.prototype);
+B2WEntregaIntegration.prototype.constructor = B2WEntregaIntegration;
+B2WEntregaIntegration.prototype.TITLE_ERROR_FIELD = 'Validação de remessa B2W Entrega';
+B2WEntregaIntegration.prototype.GUIDE_ID = '360047134673';
+B2WEntregaIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList();
+};
+B2WEntregaIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_imprimir_etiqueta, #box_btn_vincular_remessa').show();
+};
+B2WEntregaIntegration.prototype.markers = function(obj) {
+	IntegrationBase.prototype.markers.call(this, obj);
+	if (obj.fulfillment == 1) {
+		var img = document.createElement('img');
+			img.title = 'Modo de operação Fulfillment';
+			img.alt = 'Modo de operação Fulfillment';
+			img.src = 'images/icon-fulfillment.png';
+		obj.markers.appendChild(img);
+	}
+};
+B2WEntregaIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj();
+};
+B2WEntregaIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this, [
+		{ Enviar : { icon: 'images/integracoes-logisticas/cinza/b2wentrega.svg' }},
+		'Solicitar coleta',
+		{ 'Cancelar pedido': { text:'Desagrupa a PLP' }}
+	]);
+	return { menus: [ this.contextMenu ]};
+};
+B2WEntregaIntegration.prototype.initFormSendShipmentOrder = function() {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Enviar Remessa', 'Enviar');
+	$('#box_acoes_correios').empty().html('<p>Deseja enviar a remessa para sua integração B2W Entrega?</p>');
+};
+B2WEntregaIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('#div_side_acoes .act-imprimir-ars, .act-imprimir-discriminacao-conteudo, #div_side_acoes .act-imprimir-voucher, #div_side_acoes .act-imprimir-lista-det').hide();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-logistica cinza b2wentrega').show();
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		LogisticIntegration.initLabelPrint();
+		return false;
+	});
+};
+B2WEntregaIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').hide();
+};
+B2WEntregaIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1', '4']);
+	$('#box_filtro_outros_plp, #box_psq_tipo_log').show();
+};
+B2WEntregaIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList.call(this);
+};
+B2WEntregaIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	$('#box_btn_pronto_envio, #box_btn_despachado, #box_btn_imprimir_docs').hide();
+	this.updateButtonTitle('box_btn_fechar_plp','Enviar remessas');
+	$('#box_psq_tipo_log, #box_btn_solicitar_coleta, #box_btn_imprimir_plp').show();
+};
+B2WEntregaIntegration.prototype.hasQuotationMethod = function() {
+	return false;
+};
+B2WEntregaIntegration.prototype.externalLabel = function() {
+	return true;
+};
+B2WEntregaIntegration.prototype.individualLabelPrint = function() {
+	return false;
+};
+B2WEntregaIntegration.prototype.getOptsChangeShippingStatus = function(status) {
+	switch(status) {
+		case 2:
+			return {
+				title: 'Solicitar coleta',
+				description: 'Será enviada a confirmação para coleta dos pedidos contidos nas remessas selecionadas.',
+				msgLoading: 'Solicitando coleta para as remessas selecionadas, aguarde...'
+			};
+
+		default:
+			return {};
+	}
+};
+B2WEntregaIntegration.prototype.preValidateShipmentOrder = function() {
+	var errors = [];
+	var qtdEntregas = $('input[name="etiquetas[]"]').length;
+	if (qtdEntregas > 25) {
+		errors.push('Até 25 entregas podem ser agrupadas em uma mesma PLP. Separe a quantidade excedente em outras remessas.');
+	}
+	var qtdDirect = 0;
+	$('input[name="etiquetas[]"]').each(function() {
+		if ($(this).parent().parent().attr('data-correios-codservico') == 'Direct') {
+			qtdDirect++;
+		}
+	});
+	if ((qtdDirect > 0) && (qtdDirect != qtdEntregas)) {
+		errors.push('Não é permitido agrupar entregas da Direct e Correios em uma mesma PLP.');
+	}
+	return errors;
+};
+B2WEntregaIntegration.prototype.getFieldsDatatableObject = function() {
+	return [
+		'numero',
+		'remessa',
+		'cliente',
+		'integracao',
+		'servico',
+		'etiqueta',
+		'situacao',
+		'marcadores'
+	];
+};
+
+var JadlogIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+JadlogIntegration.prototype = Object.create(IntegrationBase.prototype);
+JadlogIntegration.prototype.constructor = JadlogIntegration;
+JadlogIntegration.prototype.TITLE_ERROR_FIELD = 'Validação de pedido JADLOG';
+JadlogIntegration.prototype.GUIDE_ID = '360046389974';
+JadlogIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList();
+	$('#box_btn_imprimir_etiqueta,#box_btn_vincular_remessa,#box_btn_imprimir_etiqueta').show();
+};
+JadlogIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_imprimir_etiqueta,#box_btn_vincular_remessa').show();
+};
+JadlogIntegration.prototype.initFormObj = function(serviceCode) {
+	var showElements = '#link_servicos_adicionais, #info_dimensao';
+	if (serviceCode == 40) {
+		showElements += ', #botaoObterPontosRetirada';
+	}
+	IntegrationBase.prototype.initFormObj(showElements);
+	$('#mp-box, #ar-box').hide();
+};
+JadlogIntegration.prototype.initFormSendShipmentOrder = function() {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Enviar Remessa', 'Enviar');
+	$('#box_acoes_correios').empty().html('<p>Deseja enviar a remessa de postagem para sua integração JADLOG?</p>');
+};
+JadlogIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this, [
+		{ Enviar: { icon: 'images/integracoes-logisticas/cinza/jadlog.svg' } },
+		'Cancelar pedido',
+		'Lista detalhada'
+	]);
+	return { menus: [ this.contextMenu ]};
+};
+JadlogIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-ars, .act-imprimir-discriminacao-conteudo, .act-imprimir-voucher, .act-desvincular-objetos', $('#div_side_acoes')).hide();
+	$('#div_side_acoes .act-imprimir-lista-det').show();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-logistica cinza jadlog').show();
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		LogisticIntegration.initLabelPrint();
+		return false;
+	});
+};
+JadlogIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	var codRastr = LogisticIntegration.getTrackingCode(obj);
+
+	$('#objEtiqueta').val(codRastr);
+	$('#link_acompanhamento_correios').attr('href', 'http://www.jadlog.com.br/siteDpd/tracking.jad?cte=' + codRastr);
+};
+JadlogIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1']);
+	$('#box_filtro_outros_plp').hide();
+};
+JadlogIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	$('#box_btn_pronto_envio, #box_btn_despachado, #box_btn_imprimir_docs').hide();
+	this.updateButtonTitle('box_btn_fechar_plp','Enviar remessas');
+	$('#box_btn_imprimir_docs,#box_btn_fechar_plp').show();
+};
+JadlogIntegration.prototype.initQuotationForm = function(logisticService) {
+	IntegrationBase.prototype.initQuotationForm.call(this, (logisticService.codigo == 40));
+	$('#cotacaoValorDeclarado, #cotacaoFretePorConta').show();
+};
+JadlogIntegration.prototype.externalLabel = function() {
+	return true;
+};
+JadlogIntegration.prototype.getDynamicFilters = function() {
+	var filters = [
+		'valorDeclaradoMin',
+		'valorDeclaradoIgual',
+		'valorDeclaradoMax',
+		'servico'
+	];
+	return IntegrationBase.prototype.getDynamicFilters.call(this, filters)
+};
+JadlogIntegration.prototype.updateFormConfiguration = function() {
+	IntegrationBase.prototype.updateFormConfiguration.call(this);
+	$('#formJadlog #contrato').mask('999', { placeholder: '' });
+}
+
+var MandaeIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+MandaeIntegration.prototype = Object.create(IntegrationBase.prototype);
+MandaeIntegration.prototype.constructor = MandaeIntegration;
+MandaeIntegration.prototype.TITLE_ERROR_FIELD = 'Validação de pedido Mandaê';
+MandaeIntegration.prototype.GUIDE_ID = '360046390974';
+MandaeIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList();
+};
+MandaeIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_vincular_remessa, #box_btn_imprimir_etiqueta').show();
+};
+MandaeIntegration.prototype.initFormObj = function() {
+	var showElements = '#link_servicos_adicionais, #info_dimensao';
+	IntegrationBase.prototype.initFormObj(showElements);
+	$('#mp-box, #ar-box').hide();
+};
+MandaeIntegration.prototype.showObjectLocation = function(locations) {
+	$('label[for="localizacao"]').html('Observação');
+	return locations.origem;
+};
+MandaeIntegration.prototype.initFormSendShipmentOrder = function() {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Enviar Remessa', 'Enviar');
+	$('#box_acoes_correios').empty().html('<p>Deseja enviar a remessa de postagem para sua integração Mandaê?</p>');
+};
+MandaeIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this, [
+		{ Enviar: { icon: 'images/integracoes-logisticas/cinza/mandae.svg' }}
+	]);
+	return { menus: [ this.contextMenu ]};
+};
+MandaeIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-ars, .act-imprimir-discriminacao-conteudo, .act-imprimir-voucher, .act-imprimir-lista-det', $('#div_side_acoes')).hide();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-logistica cinza mandae').show();
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		LogisticIntegration.initLabelPrint();
+		return false;
+	});
+};
+MandaeIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').attr('href', 'https://rastreae.com.br/resultado/' + LogisticIntegration.getTrackingCode(obj));
+};
+MandaeIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1']);
+	$('#box_filtro_outros_plp').hide();
+};
+MandaeIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	this.updateButtonTitle('box_btn_fechar_plp','Enviar remessas');
+	$('#box_btn_pronto_envio, #box_btn_despachado, #box_btn_imprimir_docs').hide();
+};
+MandaeIntegration.prototype.initQuotationForm = function() {
+	IntegrationBase.prototype.initQuotationForm.call();
+	$('#cotacaoValorDeclarado').show();
+};
+MandaeIntegration.prototype.externalLabel = function() {
+	return true;
+};
+MandaeIntegration.prototype.getDynamicFilters = function() {
+	var filters = [
+		'valorDeclaradoMin',
+		'valorDeclaradoIgual',
+		'valorDeclaradoMax',
+		'servico'
+	];
+	return IntegrationBase.prototype.getDynamicFilters.call(this, filters)
+};
+
+var MelhorEnvioIntegration = function () {
+	IntegrationBase.apply(this, arguments);
+};
+MelhorEnvioIntegration.prototype = Object.create(IntegrationBase.prototype);
+MelhorEnvioIntegration.prototype.constructor = MelhorEnvioIntegration;
+MelhorEnvioIntegration.prototype.GUIDE_ID = '360046391134';
+MelhorEnvioIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj('#link_servicos_adicionais, #info_dimensao');
+	$('#tipoObjeto').attr('readonly', true);
+};
+MelhorEnvioIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this, [
+		{
+			Enviar: {
+				icon: 'images/integracoes-logisticas/cinza/melhorenvio.svg' ,
+				permissions: function(data) {
+					return data.situacao  == 0 || data.situacao == -3;
+				}
+			}
+		}
+	]);
+	return { menus: [ this.contextMenu ]};
+};
+MelhorEnvioIntegration.prototype.initFormSendShipmentOrder = function () {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Enviar Remessa', 'Enviar');
+	$('#box_acoes_correios').empty().html('<p>Deseja enviar as etiquetas selecionadas para o carrinho do Melhor Envio?</p>');
+};
+
+//todo CorreiosIntegration.getServiceIcon(obj)
+MelhorEnvioIntegration.prototype.TITLE_ERROR_FIELD = 'Validação Melhor Envio';
+MelhorEnvioIntegration.prototype.initQuotationForm = function() {
+	$('#cotacaoTipoObjeto, #cotacaoDiametro, #cotacaoTotalProdutos, #cotacaoFretePorConta').hide();
+};
+MelhorEnvioIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList.call(this);
+};
+MelhorEnvioIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList.call(this);
+	$('#box_btn_imprimir_etiqueta').show();
+	$('#box_btn_vincular_remessa').hide();
+};
+MelhorEnvioIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-ars, .act-imprimir-discriminacao-conteudo, .act-imprimir-voucher, .act-imprimir-lista-det, .act-desvincular-objetos', $('#div_side_acoes')).hide();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-logistica cinza melhorenvio').show();
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		LogisticIntegration.initLabelPrint();
+		return false;
+	});
+};
+MelhorEnvioIntegration.prototype.externalLabel = function() {
+	return true;
+};
+MelhorEnvioIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').attr('href', 'https://melhorrastreio.com.br/rastreio/' + LogisticIntegration.getTrackingCode(obj));
+};
+MelhorEnvioIntegration.prototype.getFiltersShipmentList = function () {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1', '-3']);
+};
+MelhorEnvioIntegration.prototype.getActionsShipmentList = function () {
+	IntegrationBase.prototype.getActionsShipmentList();
+	this.updateButtonTitle('box_btn_fechar_plp','Incluir no carrinho');
+	$('#box_btn_imprimir_docs').show();
+	$('#box_btn_pronto_envio, #box_btn_despachado').hide();
+};
+MelhorEnvioIntegration.prototype.displaySendShipmentOrderMessage = function(integrationRes, errorType) {
+	var errors = $('<div>');
+	$.each(integrationRes, function(key, res) {
+		errors.append(
+			$('<h3>', { class: 'alert-box-title ' + (key > 0 ? 'margin-top30' : 'margin-top0'), text: 'Resultado do envio da remessa "' + res.response.remessa + '":' })
+		);
+		if (res.response.msg) {
+			errors.append(
+				$('<ul>', { class: 'margin_top10' }).append(
+					$('<li>', { html: res.response.msg })
+				)
+			);
+		}
+		if (errorType == 'warning') {
+			errors.append(
+				$('<p>', { html: $('<strong>', { text: 'Qtd de etiquetas enviadas: ' + res.response.integrationCustomMsgs.successfullySent }) }),
+				$('<p>', { html: $('<strong>', { text: 'Qtd de etiquetas não enviadas: ' + res.response.integrationCustomMsgs.unprocessed }) }),
+				$('<p>', { style: 'margin-top: 10px;', html: 'Uma nova remessa foi criada com as etiquetas não enviadas. Abra a remessa <b>"' + res.response.integrationCustomMsgs.shipmentCreated + '"</b>, corrija os erros descritos a seguir e reenvie a remessa.' })
+			);
+		}
+		if (res.response.integrationCustomMsgs && res.response.integrationCustomMsgs.errorObjs) {
+			var errorsList = $('<ul>', { class: 'margin_top10' });
+			$.each(res.response.integrationCustomMsgs.errorObjs, function (i, errorObj) {
+				errorsList.append(
+					$('<li>', { html: '<b>' + (errorType == 'warning' ? errorObj.indNewShipment : errorObj.indShipment) + 'º objeto da remessa:</b> ' + errorObj.error })
+				);
+			});
+			errors.append(errorsList);
+		}
+	});
+	return errors;
+};
+MelhorEnvioIntegration.prototype.msgSuccessSendShipmentOrder = function() {
+	showDialogMessage({
+		alertTitle: 'Etiquetas enviadas para o carrinho!',
+		content: '<p><a href="https://melhorenvio.com.br/carrinho" target="_blank">Clique aqui</a> para acessar o carrinho do Melhor Envio e finalizar a compra.</p>',
+		status: 'success',
+		height: 285,
+		hideCancel: true
+	});
+};
+MelhorEnvioIntegration.prototype.getDynamicFilters = function() {
+	var filters = [
+		'valorDeclaradoMin',
+		'valorDeclaradoIgual',
+		'valorDeclaradoMax',
+		'avisoRecebimento',
+		'maoPropria',
+		'servico'
+	];
+	return IntegrationBase.prototype.getDynamicFilters.call(this, filters)
+};
+
+var JamefIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+JamefIntegration.prototype = Object.create(IntegrationBase.prototype);
+JamefIntegration.prototype.constructor = JamefIntegration;
+JamefIntegration.prototype.GUIDE_ID = '360047026593';
+JamefIntegration.prototype.hideBtnTrackingSync = false;
+JamefIntegration.prototype.initFiltersFormObjectList = function() {
+	$('#box_btn_vincular_remessa').show();
+};
+JamefIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj('#link_servicos_adicionais, #info_dimensao');
+	$('#mp-box, #ar-box').hide();
+};
+JamefIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this, [{ Enviar: { icon: 'images/integracoes-logisticas/cinza/jamef.svg' }} ]);
+	return { menus: [ this.contextMenu ]};
+};
+JamefIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-ars, .act-imprimir-discriminacao-conteudo, #div_side_acoes .act-imprimir-voucher', $('#div_side_acoes')).hide();
+	$('#div_side_acoes .act-imprimir-lista-det').show();
+	$('#div_side_acoes .act-imprimir-etiquetas').addClass('ico-jamef');
+	$(document).on('click', '.act-imprimir-etiquetas', function() {
+		verificarImpressaoSelecionados('etiqueta', true);
+		return false;
+	});
+};
+JamefIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').hide();
+};
+JamefIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1']);
+	$('#box_filtro_outros_plp').hide();
+};
+JamefIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_gerar_plp, #box_btn_vincular_remessa').hide();
+	$('#box_btn_imprimir_etiqueta').show();
+};
+JamefIntegration.prototype.initFormSendShipmentOrder = function() {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Enviar Remessa', 'Enviar');
+	$('#box_acoes_correios').empty().html('<p>Deseja enviar a remessa para sua integração Jamef?</p>');
+};
+JamefIntegration.prototype.initQuotationForm = function() {
+	IntegrationBase.prototype.initQuotationForm.call();
+	$('#cotacaoValorDeclarado').show();
+};
+JamefIntegration.prototype.externalLabel = function() {
+	return true;
+};
+JamefIntegration.prototype.individualLabelPrint = function() {
+	return true;
+};
+JamefIntegration.prototype.getDynamicFilters = function() {
+	var filters = [
+		'valorDeclaradoMin',
+		'valorDeclaradoIgual',
+		'valorDeclaradoMax',
+		'servico'
+	];
+	return IntegrationBase.prototype.getDynamicFilters.call(this, filters)
+};
+JamefIntegration.prototype.getFieldsDatatableObject = function() {
+	return [
+		'numero',
+		'cliente',
+		'integracao',
+		'servico',
+		'etiqueta',
+		'valorDeclarado',
+		'situacao',
+		'marcadores'
+	];
+};
+
+var MagaluEntregasIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+MagaluEntregasIntegration.prototype = Object.create(IntegrationBase.prototype);
+MagaluEntregasIntegration.prototype.constructor = MagaluEntregasIntegration;
+MagaluEntregasIntegration.prototype.GUIDE_ID = '360047027713';
+MagaluEntregasIntegration.prototype.getFiltersShipmentList = function () {
+	IntegrationBase.prototype.getFiltersShipmentList([]);
+};
+MagaluEntregasIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_imprimir_etiqueta').show();
+	$('#box_btn_gerar_plp').hide();
+};
+MagaluEntregasIntegration.prototype.getIcoSrc = function() {
+	return {
+		src: 'images/integracoes-logisticas/cor/magaluentregas.svg',
+		class: 'ico-logistica cinza magalu-entregas'
+	};
+};
+MagaluEntregasIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList.call(this);
+	$('#box_psq_customizada_obj').hide();
+};
+MagaluEntregasIntegration.prototype.hasQuotationMethod = function() {
+	return false;
+};
+MagaluEntregasIntegration.prototype.externalLabel = function() {
+	return true;
+};
+MagaluEntregasIntegration.prototype.individualLabelPrint = function() {
+	return false;
+};
+MagaluEntregasIntegration.prototype.updateFormObjectTracking = function(obj) {
+	CorreiosIntegration.prototype.updateFormObjectTracking.call(this, obj);
+};
+
+var MercadoEnviosFlexIntegration = function() {
+	MercadoEnviosIntegration.apply(this, arguments);
+};
+MercadoEnviosFlexIntegration.prototype = Object.create(MercadoEnviosIntegration.prototype);
+MercadoEnviosFlexIntegration.prototype.GUIDE_ID = '360051490953';
+MercadoEnviosFlexIntegration.prototype.updateFormConfiguration = function() {
+	IntegrationBase.prototype.updateFormConfiguration.call(this);
+	var updateFieldsConfigMEFlex = function() {
+		if ($('input[type=radio][name="confAutenticacao[prazoEntrega]"]:checked').val() == 'same_day') {
+			$('select[name="confAutenticacao[horarioLimite]"]').attr('disabled', false);
+		} else {
+			$('select[name="confAutenticacao[horarioLimite]"]').attr('disabled', true).val('');
+		}
+	}
+
+	updateFieldsConfigMEFlex();
+	$('input[type=radio][name="confAutenticacao[prazoEntrega]"]').change(updateFieldsConfigMEFlex);
+};
+
+var B2WO2OIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+B2WO2OIntegration.prototype = Object.create(IntegrationBase.prototype);
+B2WO2OIntegration.prototype.constructor = B2WO2OIntegration;
+B2WO2OIntegration.prototype.GUIDE_ID = '360055940533';
+B2WO2OIntegration.prototype.getFiltersShipmentList = function () {
+	IntegrationBase.prototype.getFiltersShipmentList([]);
+};
+B2WO2OIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	$('#box_btn_pronto_envio, #box_btn_despachado, #box_btn_imprimir_docs, #box_btn_fechar_plp').hide();
+	$('#box_btn_disponibilidade_estoque').show();
+};
+B2WO2OIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_gerar_plp, #box_btn_enviar_rastreamentos_email').hide();
+};
+B2WO2OIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+	$('#enviarEmailRastro').hide();
+};
+
+B2WO2OIntegration.prototype.getIcoSrc = function() {
+	return {
+		src: 'images/integracoes-logisticas/cor/b2wo2o.svg',
+		class: 'ico-logistica cinza b2wo2o'
+	};
+};
+B2WO2OIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList.call(this);
+};
+B2WO2OIntegration.prototype.hasQuotationMethod = function() {
+	return false;
+};
+B2WO2OIntegration.prototype.getDynamicFilters = function() {
+	var filters = [
+		'servico'
+	];
+	return IntegrationBase.prototype.getDynamicFilters.call(this, filters)
+};
+B2WO2OIntegration.prototype.getFieldsDatatableObject = function() {
+	return [
+		'numero',
+		'remessa',
+		'cliente',
+		'integracao',
+		'servico',
+		'situacao',
+		'marcadores'
+	];
+};
+B2WO2OIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this);
+
+	this.contextMenu['Disponibilidade de estoque'] = {
+		permissions: function(data) {
+			return data.situacao == 0;
+		},
+		icon: 'fas fa-cube',
+		action: function(data) {
+			confirmarDisponibilidadeEstoque([data.id]);
+		}
+	}
+
+	this.contextMenu['Confirmar retirada'] = {
+		permissions: function(data) {
+			return data.situacao == 2;
+		},
+		icon: 'fas fa-check',
+		action: function(data) {
+			abrirPopupValidacaoSenha(data.id);
+		}
+	}
+
+	return { menus: [ this.contextMenu ]};
+};
+B2WO2OIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('.act-imprimir-etiquetas, .act-imprimir-ars, .act-imprimir-voucher, .act-imprimir-lista-det, .act-imprimir-discriminacao-conteudo, .act-alterar-objetos, .act-desvincular-objetos').hide();
+	var top = document.getElementById('top-counter');
+	if (top) {
+		top.className = 'mdc-layout-grid__cell mdc-layout-grid__cell--span-2-phone mdc-layout-grid__cell--span-10-desktop';
+	}
+};
+
+B2WO2OIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1', '2', '3', '-1']);
+};
+
+var OlistFulfillmentIntegration = function() {
+	IntegrationBase.apply(this, arguments);
+};
+OlistFulfillmentIntegration.prototype = Object.create(IntegrationBase.prototype);
+OlistFulfillmentIntegration.prototype.constructor = OlistFulfillmentIntegration;
+OlistFulfillmentIntegration.prototype.TITLE_ERROR_FIELD = 'Validação de remessa Olist Fulfillment';
+OlistFulfillmentIntegration.prototype.GUIDE_ID = '360056717314';
+OlistFulfillmentIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList();
+};
+OlistFulfillmentIntegration.prototype.getActionsObjectList = function() {
+	IntegrationBase.prototype.getActionsObjectList();
+	$('#box_btn_vincular_remessa').show();
+};
+
+OlistFulfillmentIntegration.prototype.initFormObj = function() {
+	IntegrationBase.prototype.initFormObj();
+};
+OlistFulfillmentIntegration.prototype.getContextMenu = function() {
+	IntegrationBase.prototype.getContextMenu.call(this, [
+		{ Enviar : { icon: 'images/integracoes-logisticas/cinza/olistfulfillment.svg' }},
+		'Imprimir'
+	]);
+	return { menus: [ this.contextMenu ]};
+};
+OlistFulfillmentIntegration.prototype.initFormSendShipmentOrder = function() {
+	IntegrationBase.prototype.initFormSendShipmentOrder.call(this, 'Enviar Remessa', 'Enviar');
+	$('#box_acoes_correios').html('<p>Deseja enviar a remessa para sua integração Logística Olist?</p>');
+};
+OlistFulfillmentIntegration.prototype.initFormObjectShipment = function() {
+	IntegrationBase.prototype.initFormObjectShipment.call(this, arguments);
+	$('#div_side_acoes .act-imprimir-ars, #div_side_acoes .act-imprimir-voucher, #div_side_acoes .act-imprimir-etiquetas').hide();
+	$('.act-imprimir-discriminacao-conteudo, #div_side_acoes .act-imprimir-lista-det').show();
+};
+OlistFulfillmentIntegration.prototype.updateFormObjectTracking = function(obj) {
+	IntegrationBase.prototype.updateFormObjectTracking.call(this, obj);
+
+	$('#objEtiqueta').val(LogisticIntegration.getTrackingCode(obj));
+	$('#link_acompanhamento_correios').hide();
+};
+OlistFulfillmentIntegration.prototype.getFiltersShipmentList = function() {
+	IntegrationBase.prototype.getFiltersShipmentList(['0', '1', '4']);
+	$('#box_filtro_outros_plp, #box_psq_tipo_log').show();
+};
+OlistFulfillmentIntegration.prototype.getFiltersObjectList = function() {
+	IntegrationBase.prototype.getFiltersObjectList.call(this);
+};
+OlistFulfillmentIntegration.prototype.getActionsShipmentList = function() {
+	IntegrationBase.prototype.getActionsShipmentList();
+	$('#box_btn_pronto_envio, #box_btn_despachado, #box_btn_imprimir_docs').hide();
+	this.updateButtonTitle('box_btn_fechar_plp','Enviar remessas');
+};
+OlistFulfillmentIntegration.prototype.hasQuotationMethod = function() {
+	return false;
+};
+OlistFulfillmentIntegration.prototype.externalLabel = function() {
+	return true;
+};
+OlistFulfillmentIntegration.prototype.individualLabelPrint = function() {
+	return false;
+};
+OlistFulfillmentIntegration.prototype.getOptsChangeShippingStatus = function(status) {
+	switch(status) {
+		case 2:
+			return {
+				title: 'Solicitar coleta',
+				description: 'Será enviada a confirmação para coleta dos pedidos contidos nas remessas selecionadas.',
+				msgLoading: 'Solicitando coleta para as remessas selecionadas, aguarde...'
+			};
+
+		default:
+			return {};
+	}
+};
+
+OlistFulfillmentIntegration.prototype.preValidateShipmentOrder = function() {
+	var errors = [];
+	var qtdEntregas = $('input[name="etiquetas[]"]').length;
+	if (qtdEntregas > 50) {
+		errors.push('Até 50 entregas podem ser agrupadas em uma mesma remessa da Olist. Separe a quantidade excedente em outras remessas.');
+	}
+	return errors;
+};
+OlistFulfillmentIntegration.prototype.getFieldsDatatableObject = function() {
+	return [
+		'numero',
+		'remessa',
+		'cliente',
+		'integracao',
+		'servico',
+		'etiqueta',
+		'situacao',
+		'marcadores'
+	];
+};
+OlistFulfillmentIntegration.prototype.disableAddVolumeButton = function() {
+	return true;
+};

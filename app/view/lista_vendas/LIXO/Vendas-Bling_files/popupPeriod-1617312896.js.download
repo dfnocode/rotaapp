@@ -1,0 +1,30 @@
+function openPopupPeriod(fieldInicio, fieldFim) {
+	var dataInicio = document.getElementById(fieldInicio).value;
+	var dataFim = document.getElementById(fieldFim).value;
+	//displayMessage('templates/form.periodo.popup.php?dataInicio='+dataInicio+'&dataFim='+dataFim+'&fieldInicio='+fieldInicio+'&fieldFim='+fieldFim,490,240);		
+	new Boxy.load('templates/form.periodo.popup.php?dataInicio='+dataInicio+'&dataFim='+dataFim+'&fieldInicio='+fieldInicio+'&fieldFim='+fieldFim, {
+		title: "Selecione o período", 
+		modal: true,
+		unloadOnHide: true,
+		afterShow: loadCalendars,
+		afterHide: fechaCalendario
+	});
+}
+
+function aplicarPeriodo(de, ate, fieldInicio, fieldFim){
+	$(fieldInicio).val(de);
+	$(fieldFim).val(ate);
+	$(fieldFim).change();
+	//closeMessage();
+	Boxy.get("#formDados").hide();
+}
+
+function loadCalendars(){
+	$('.date-pick').datepicker( {
+		startDate: '01/01/1970'
+	});
+}
+
+function fechaCalendario(){
+	$('.date-pick').datepicker("hide");
+}

@@ -1,0 +1,570 @@
+function UnicoContatoRapido(config) {
+	this.setConfigurations(config);
+	this.montar(config);
+}
+
+UnicoContatoRapido.prototype.setConfigurations = function(configurations) {
+	this.data = null;
+	this.tmpData = null;
+	this.executaAfterChange = true;
+	this.config = {
+					extraValidation : function() {
+						return true;
+					},
+					id: '',
+					sempreEditavel: false,
+					name: undefined,
+					acomplete: '',
+					idField: '',
+					editLink: '',
+					tipoContato: '',
+					applyFilter : false,
+					message: [],
+					fieldsAssign: {
+						action: false,
+						fields: false,
+						parent: '',
+						fakeFields: false,
+						eventsDone: false
+					},
+					buttons : {
+						pessoasContato : false,
+						pesquisar  :false,
+						novo :  true,
+					},
+					fnRenderItemUi: null,
+					input: null,
+					afterChange: undefined,
+					width: '100%'
+					};
+	LerConfiguracoes(this.config, configurations);
+	if (this.config.name == undefined ) {
+	    this.config.name = this.config.acomplete;
+	}
+};
+
+UnicoContatoRapido.prototype.montar = function() {
+	var classe = this;
+	this.acompleteField = $('<input>', {
+		type: 'text',
+		placeholder: this.config.message.placeholder,
+		name: this.config.name,
+		id: this.config.acomplete,
+		class: 'input_text'
+	}).autocomplete({
+		source: 'services/contatos.lookup.php' + (this.config.applyFilter ? '?tipoContato=' + this.config.tipoContato : ''),
+		select: function(event, ui) {
+			ui = ui.item;
+			ui.nome = ui.label;
+			classe.tmpData = ui;
+		},
+		close: function() {
+			if (classe.tmpData != null ) {
+			    classe.adicionar();
+			}
+		},
+		search: function() {
+			classe.loadingIcon.show();
+		},
+		response: function() {
+			classe.loadingIcon.hide();
+		},
+		fnRenderItemUi: this.config.fnRenderItemUi,
+		delay: 250,
+		minLength: 2,
+		selectOnly: true
+	})
+	.on('keyup', function(event) {
+		classe.eventoAoDigitar(event);
+	});
+	var buttons = [];
+	if (this.config.extraValidation != undefined) {
+		var icon = new warningIcon({
+			acompleteField: this.acompleteField,
+			idField: this.config.input,
+			validacao : this.config.extraValidation,
+			timerToClose : 5000
+		});
+		this.config.extraValidation = function(id) {
+			return icon.validar(id);
+		};
+	}
+	for (var btn in this.config.buttons) {
+		var button = this.config.buttons[btn];
+		if (!button) {
+			continue;
+		}
+		if (btn == 'historico') {
+			var tipo = this.config.buttons[btn] ? this.config.buttons[btn]['tipo'] : 'S';
+			this.btnHistorico = $('<a>',
+										{
+											class: 'formIcon invisivel',
+											id: 'historico',
+											title: 'Visualizar histórico do cliente'
+										}
+							).append(
+								$('<i>', { class: 'icon-info-sign no-tipsy' })
+							).on('click', function() {
+								//como parametrizar o que seris isso
+								visualizarAsInformacoesHistoricoCliente(tipo);
+							});
+			buttons.push(this.btnHistorico);
+		}
+		if (btn == 'pessoasContato') {
+			this.btnPessoasContato = $('<a>',{
+												class: "formIcon invisivel",
+												title: "Visualizar pessoas de contato"
+												}
+											).append(
+												$('<i>',{ class: "fa fa-eye" })
+											).on('click',function() {
+												classe.pessoasContato();
+											});
+			buttons.push(this.btnPessoasContato);
+			buttons.push(' ');
+			continue;
+		}
+		if (btn == 'pesquisar' || btn == 'buscar') {
+			buttons.push($('<a>',{ title: "Pesquisar", class: "formIcon hidde-ro" }).append(
+									$('<i>',{ class: 'icon-search' })
+								).on('click', function() {
+									displayWait('pleasewait');
+									classe.abrirPopupBusca();
+								})
+			);
+			buttons.push(' ');
+			continue;
+		}
+		if (btn == 'novo') {
+			this.iconAdd = $('<a>',{ class: 'formIcon', title: 'Adicionar novo' }).append(
+								$('<i>', { class: 'icon-plus' }).html('')
+							).on('click', function() {
+								classe.abrirPopupForm();
+							});
+			buttons.push(this.iconAdd);
+			buttons.push(' ');
+			continue;
+		}
+		if (button.order == 'after') {
+			buttons.unshift(' ');
+			buttons.unshift(button.btn);
+			continue;
+		}
+		buttons.push(button.btn);
+		buttons.push(' ');
+	}
+	this.loadingIcon = $('<i>', { class : 'loading', text:' '});
+	this.iconesArea = $('<span>', { class: 'contato-rapido-icones' }).append(
+							this.loadingIcon,
+							buttons
+						);
+	this.divArea = $('<div>', {class:'vertical-align align-input-icons'}).append(
+			this.acompleteField,
+			this.iconesArea
+	).insertBefore(this.config.input);
+	$('<div>', { class: 'message-area'}).insertAfter(this.divArea);
+	this.warnings();
+	if (this.config.fieldsAssign.action) {
+		classe = this;
+		window.displayForm = Interceptor.intercept(function() {
+			$.each(classe.config.fieldsAssign.fields, function(index, val) {
+				classe.limpaErroCampoExtra(val);
+			});
+			if (classe.config.fieldsAssign.eventsDone) {
+				return;
+			}
+			classe.vincularCamposExtras();
+		}, 'displayForm');
+	}
+};
+
+UnicoContatoRapido.prototype.eventoAoDigitar = function(event) {
+	if ((event.keyCode == 13 || ((event.ctrlKey || this.prevKey == 17) && event.keyCode == 86)) && !this.disabilitaEnter) {
+		var classe = this;
+		displayWait('pleasewait');
+		xajax_buscarAutoCompletarContato(this.acompleteField.val(), function(data) {
+			closeWait('pleasewait');
+			if (data.length == 0) {
+				return;
+			}
+			classe.tmpData = data;
+			classe.adicionar();
+			classe.acompleteField.autocomplete( "close" );
+		});
+		this.prevKey = event.keyCode;
+		return;
+	}
+	if ((this.data != null && this.data.id !==0 && this.acompleteField.val() != this.data.nome)) {
+		this.limpar();
+		if (this.config.afterChange !== undefined && this.executaAfterChange) {
+			this.config.afterChange({});
+		}
+	}
+	if (this.config.buttons.novo) {
+		this.warningVazio.validar();
+	}
+	this.prevKey = event.keyCode;
+};
+
+UnicoContatoRapido.prototype.warnings = function() {
+	//ISSSUE the elements lose bind functions
+	var classe = this;
+	this.warningVazio = new warningIcon({
+		acompleteField: this.acompleteField,
+		idField: this.config.input,
+		message : this.config.message.naoEncontrado,
+		messageArea: $('<span>').append(
+						'Este parece ser um contato que não está cadastrado no sistema.',
+						$('<br/>'),
+						'Se você deseja completar os dados ',
+						$('<span>',{ style: 'cursor:pointer; color:#7CB5D8', text:'clique aqui' }).on('click', function() {
+							classe.abrirPopupForm();
+						})
+					)
+	});
+	this.warningObs = new warningIcon( {
+		acompleteField: this.acompleteField,
+		messageArea: '',
+		class: 'alert-box-info'
+	});
+};
+
+UnicoContatoRapido.prototype.exibir = function(dados, executaAfterChange) {
+	if (dados == undefined || dados == '') {
+		return;
+	}
+	this.executaAfterChange = false;
+	if (executaAfterChange != undefined) {
+		this.executaAfterChange = executaAfterChange;
+	}
+	this.tmpData = dados;
+	if (typeof dados != 'object') {
+		this.tmpData = { id : dados };
+	}
+	this.adicionar();
+};
+
+UnicoContatoRapido.prototype.adicionar = function() {
+	this.warningVazio.remover();
+	if(!this.validar()) {
+		return;
+	}
+	this.disabilitaEnter = true;
+	var id = this.tmpData.id ;
+	this.warningObs.remover();
+	this.config.input.val(id);
+	if (this.iconAdd != undefined) {
+		this.iconAdd.prop("title", "Editar Contato")
+					.find("i")
+					.removeClass('icon-plus')
+					.addClass('icon-pencil');
+	}
+	if (this.btnPessoasContato != undefined ) {
+		this.btnPessoasContato.removeClass('invisivel');
+	}
+	if (this.btnHistorico != undefined ) {
+		this.btnHistorico.removeClass('invisivel');
+	}
+	var classe = this;
+	var icones = this.iconesArea.children().not('.invisivel');
+	var larguraTotal = 0;
+	for (var i =0; i < icones.length; i++ ) {
+		larguraTotal += $(icones[i]).width();
+	}
+	larguraTotal += 10;
+	this.acompleteField.css("padding-right",larguraTotal.toString()+'px');
+	var fnAfterData = function (data, subcall) {
+		classe.data = data;
+		classe.acompleteField.val(data.nome);
+		if (data.obs != null && data.obs.trim()!= '') {
+			classe.warningObs.getMessageArea().html($('<span>').html(data.obs));
+			classe.warningObs.adicionar();
+		} else if (data.cep === undefined && !subcall) {
+			xajax_buscarDadosContatoRapido(id, function(data) { fnAfterData(data, true); });
+			return;
+		}
+		if (classe.config.afterChange !== undefined && classe.executaAfterChange) {
+			classe.config.afterChange(data);
+		}
+		if (classe.config.fieldsAssign.action) {
+			classe.vincularCamposExtras(data);
+		}
+		classe.executaAfterChange = true;
+	};
+	//evitar a chamada desta função devido a volatilidade do evento before change
+	if (this.tmpData.nome == undefined) {
+		this.tmpData = null;
+		xajax_buscarDadosContatoRapido(id, fnAfterData);
+		return;
+	}
+	fnAfterData(this.tmpData);
+	this.tmpData = null;
+};
+
+UnicoContatoRapido.prototype.vincularCamposExtras = function(data) {
+	var data = data || null;
+	var classe = this;
+	if (!data) {
+		if (classe.config.fieldsAssign.fields) {
+			data = {};
+			$.each(classe.config.fieldsAssign.fields, function(index, val) {
+				data[index] = $('.content').find('#' + val).val();
+			});
+		}
+	}
+	$.each(data, function(index, val) {
+		if (classe.config.fieldsAssign.fakeFields) {
+			if (classe.config.fieldsAssign.fakeFields.includes(index)) {
+				return;
+			}
+		}
+		if (index != 'id' && index != 'nome') {
+			var campo = index;
+			if (classe.config.fieldsAssign.fields && classe.config.fieldsAssign.fields[campo] != undefined) {
+				campo = classe.config.fieldsAssign.fields[campo];
+			}
+			if ($(classe.config.fieldsAssign.parent).find('#' + campo)) {
+				if (!$(classe.config.fieldsAssign.parent).find('#' + campo).parents(classe.config.fieldsAssign.parent).length) {
+					return;
+				}
+				$(classe.config.fieldsAssign.parent).find('#' + campo).unbind('blur');
+				$(classe.config.fieldsAssign.parent).find('#' + campo).val(val).trigger('change').on('blur', function(){
+					classe.mostrarErrosCampos(data, campo);
+				});
+			}
+		}
+	});
+}
+
+UnicoContatoRapido.prototype.mostrarErrosCampos = function(data, campo) {
+	var classe = this;
+	data.id = $(classe.config.fieldsAssign.parent).find('#' + classe.config.idField).val();
+	data[campo] = $(classe.config.fieldsAssign.parent).find('#' + campo).val();
+	if (campo == 'cnpj') {
+		xajax_validaCPFeCNPJ(data.cnpj, data.tipo, data.id, function(response) {
+			classe.limpaErroCampoExtra(campo);
+			if (!response.valido && response.idExistente) {
+				response.message = 'CPF/CNPJ já vinculado a outro cliente';
+				classe.mostraErroCampoExtra(response.idExistente, response.message, campo);
+			}
+		});
+	}
+}
+
+UnicoContatoRapido.prototype.limpaErroCampoExtra = function(campo) {
+	var classe = this;
+	if ($(classe.config.fieldsAssign.parent).find('#' + campo)[0].hasAttribute('data-toggle')) {
+		$(classe.config.fieldsAssign.parent).find('#' + campo).removeAttr('data-toggle data-trigger data-content data-html data-placement data-container data-original-title title');
+		$(classe.config.fieldsAssign.parent).find('#' + campo).popover('destroy');
+		fieldFeedback(campo, 'success');
+	}
+}
+
+UnicoContatoRapido.prototype.mostraErroCampoExtra = function(id, message, campo) {
+	var classe = this;
+	var clickFunction = function() {
+		classe.corrigirContato(id, campo);
+		$(classe.config.fieldsAssign.parent).find('#' + campo).popover('hide');
+	};
+	fieldFeedback(campo, 'error', '<b>' + message + '</b>' + '<br/><a>Revisar esse cadastro agora</a>', undefined, {
+		position: 'bottom',
+		trigger: 'manual',
+		function: clickFunction,
+		class: 'popover-erro'
+	});
+	setTimeout(function() {
+		$(classe.config.fieldsAssign.parent).find('#' + campo).popover('show');
+	}, 200);
+}
+
+UnicoContatoRapido.prototype.corrigirContato = function(id, campo) {
+	var classe = this;
+	formContatoRapido.config.openField = campo;
+	return formContatoRapido.abrirPopup({
+		id: id,
+		afterSave : function(id, nome) {
+			classe.limpar();
+			classe.exibir(id, true);
+			setTimeout(function(){
+				$(classe.config.fieldsAssign.parent).find('#' + campo).trigger('blur').focus();
+			}, 200);
+		},
+		afterDestroy: function() {
+			$(classe.config.fieldsAssign.parent).find('#' + campo).val('').trigger('blur').focus();
+		}
+	});
+}
+
+UnicoContatoRapido.prototype.validar = function() {
+	if (this.tmpData == null || !this.config.extraValidation(this.tmpData.id)) {
+		this.config.input.val('');
+		this.data = null;
+		this.acompleteField.val('');
+		this.warningObs.remover();
+		return false;
+	}
+	return true;
+};
+
+UnicoContatoRapido.prototype.abrirPopupBusca = function() {
+	var classe = this;
+	formContatoRapido.config.afterSave = function(id, nomeCampo) {
+		classe.tmpData = { id: id, nome: classe.acompleteField.val()  };
+		classe.adicionar();
+	};
+	this.modalBuscaContatos();
+};
+
+UnicoContatoRapido.prototype.abrirPopupForm = function() {
+	var classe = this;
+	if ($("#"+this.config.acomplete).attr('readonly') != undefined && !this.config.sempreEditavel) {
+		formContatoRapido.apenasLeitura(true);
+	} else {
+		formContatoRapido.apenasLeitura(false);
+	}
+	return formContatoRapido.abrirPopup( {
+		field: classe.config.acomplete,
+		id: classe.config.input.val(),
+		nome : $('#' + classe.config.acomplete).val(),
+		tipoContato: classe.config.tipoContato,
+		afterSave : function(id, nome) {
+			classe.tmpData = { id: id, nome: nome };
+			classe.adicionar();
+		},
+	});
+};
+
+UnicoContatoRapido.prototype.apenasLeitura = function(apenasLeitura){
+	if (this.iconAdd != undefined) {
+		this.iconAdd.find('.icon-pencil').show();
+	}
+	if (apenasLeitura) {
+		$('.hidde-ro').hide();
+		return;
+	}
+	$('.hidde-ro').show();
+};
+
+UnicoContatoRapido.prototype.limpar = function() {
+	this.data = null;
+	this.warningObs.remover();
+	this.warningVazio.remover();
+	this.config.input.val('');
+	if (this.iconAdd != undefined) {
+		this.iconAdd.prop("title", "Adicionar novo")
+						.find("i")
+						.addClass('icon-plus')
+						.removeClass('icon-pencil');
+	}
+	if (this.btnPessoasContato != undefined ) {
+		this.btnPessoasContato.addClass('invisivel');
+	}
+	if (this.btnHistorico != undefined ) {
+		this.btnHistorico.addClass('invisivel');
+	}
+	this.acompleteField.css("padding-right",(this.iconesArea.width() + 26).toString()+'px');
+	this.config.input.parent().find('.message-area div').hide();
+	this.acompleteField.removeClass('warning');
+	this.disabilitaEnter = false;
+};
+
+UnicoContatoRapido.prototype.remove = function() {
+	this.config.input.val('');
+	this.divArea.remove();
+};
+
+UnicoContatoRapido.prototype.mensagem = function(message) {
+	var conf = {
+		acompleteField: this.acompleteField,
+		idField: this.config.input,
+		timerToClose : 0,
+		message : '',
+		messageArea: null
+	};
+	if (typeof message == 'string') {
+		conf.message = message;
+	} else {
+		LerConfiguracoes(conf, message);
+	}
+	return new warningIcon(conf);
+};
+
+UnicoContatoRapido.prototype.modalBuscaContatos = function() {
+	field = this.config.acomplete;
+	var busca = document.getElementById(field).value;
+	var url = '';
+	url = 'templates/form.searchContatos.popup.php?field=' + field + '&busca=' + busca + '&afterUpdate=formContatoRapido.config.afterSave';
+	$.get(url, function(data) {})
+	.done(function(data) {
+		var dialog = {
+			'content': data,
+			'config': {
+				'width': 964,
+				'modal': true
+			},
+			'htmlTitle': 'Pesquisar Cadastro',
+			'hideCancel': true,
+			'hideOk': false,
+			'idOk': 'setarContatoDialog',
+			'fnCreate': function() {
+				xajax_pesquisarContatos(xajax.getFormValues('formBuscaContatos'));
+				displayWait('pleasewait', true, 'Aguarde carregando...');
+			}
+		};
+		createDialog(dialog);
+	})
+	.always(function() {
+		closeWait('pleasewait');
+	});
+};
+
+UnicoContatoRapido.prototype.pessoasContato = function () {
+	displayWait('pleasewait', true, 'Carregando informações');
+	xajax_buscarPessoasContato(this.data.id, function(data) {
+		if (data.length == 0) {
+			closeWait('pleasewait');
+			DialogMessage.info({
+				'htmlTitle': 'Informação',
+				'description': 'Não foram localizadas pessoas de contato.'
+			});
+			return;
+		}
+		createDialog({
+			'htmlTitle': 'Pessoas de contato',
+			'width': 648,
+			'content': $('<div>', { id: 'contatosVinculados' }),
+			'idOk': 'btnOk',
+			'textCancelar': 'Fechar',
+			'fnCreate': function() {
+				$('#btnOk').remove();
+			}
+		});
+		$('<table>', { id: 'tableContato', style: 'width: 100%;', class: 'tabela-listagem', style: 'width: 100%' }).appendTo('#contatosVinculados').append(
+			$('<tr>', { id: 'header-tabela' }).append(
+				$('<th>', { style: 'width:25%;padding:2pt;text-align:left;' }).html('Nome'),
+				$('<th>', { style: 'width:25%;padding:2pt;text-align:left;' }).html('Celular'),
+				$('<th>', { style: 'width:20%;padding:2pt;text-align:left;' }).html('Fone'),
+				$('<th>', { style: 'width:35%;padding:2pt;text-align:left;' }).html('E-mail')
+			)
+		);
+		data.forEach(function(item) {
+			$('<tr>', {}).appendTo('#contatosVinculados tbody').append(
+				$('<td>', { style: 'padding: 2pt;text-align:left;' }).html(item.nome),
+				$('<td>', { style: 'padding-right: 5pt; text-align:left;' }).html(item.celular),
+				$('<td>', { style: 'padding-right: 5pt; text-align:left;' }).html(item.fone),
+				$('<td>', { style: 'padding-right: 5pt; text-align:left;' }).html(item.email)
+			);
+		});
+		closeWait('pleasewait');
+	});
+};
+
+UnicoContatoRapido.prototype.mostrarErros = function(campos, valoresCampos) {
+	var promisse = this.abrirPopupForm();
+	if (valoresCampos !== undefined) {
+		formContatoRapido.preenche(valoresCampos);
+	}
+	promisse.done(function() {
+		fieldsFeedBack(campos.error, 'error', formContatoRapido.form().attr('id'));
+	});
+};

@@ -1,0 +1,160 @@
+.sidebar-dark-primary {
+    background-color: #eee;
+}
+
+
+/* fundo menu Sidebar e bordas */
+
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>a {
+    background-color: #FCDE04;
+    border-bottom-color: #000;
+}
+
+
+/* estilo da borda, fundo e padding do icone topo Sidebar */
+
+.img-circle {
+    border-radius: 2%;
+    padding: 1px;
+}
+
+
+/* estilo do menu Central de Mensagens, topo Sidebar */
+
+#msg-center {
+    background-color: #094d68;
+    border-bottom-color: #0c78a2;
+}
+
+#msg-center>span:nth-child(3) {
+    font-size: 18px;
+    margin-left: 12px;
+}
+
+
+/* cor */
+
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li>a>p {
+    color: #000;
+    padding-left: 12px;
+}
+
+
+/* tira os > de cada menu na Sidebar */
+
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li>a>p>i {
+    display: none;
+}
+
+
+/* muda o cor do icones font-awesome do menu Sidebar */
+
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li>a>i {
+    color: #000;
+}
+
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(1)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(2)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(3)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(4)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(5)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(6)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(6)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(7)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(8)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(9)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(1)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(2)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(3)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(4)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(5)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(6)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(7)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(8)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(9)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(10)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(11)>a,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(12)>a {
+    padding: 10px 12px 12px 12px;
+    height: 40px;
+    margin: 3px 8px 3px 0;
+    border-radius: 0 20px 20px 0;
+    color: #777;
+}
+
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(1)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(2)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(3)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(4)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(5)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(6)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(7)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(8)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(9)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(10)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(11)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(12)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(1)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(2)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(3)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(4)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(5)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(6)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(7)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(8)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li:nth-child(9)>a:hover {
+    padding: 10px 12px 12px 12px;
+    height: 40px;
+    margin: 3px 8px 3px 0;
+    border-radius: 0 20px 20px 0;
+    background-color: #e4e4fe;
+    transition: background .3s ease-in-out;
+    color: #000000;
+}
+
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(1)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(2)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(3)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(4)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(5)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(6)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(7)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(8)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(9)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(10)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(11)>a:hover,
+body>div>aside.main-sidebar.sidebar-dark-primary.elevation-4>div>nav>ul>li.nav-item.has-treeview.menu-open>ul>li:nth-child(12)>a:hover {
+    color: #000;
+}
+
+
+/* @media (min-width: 768px) {
+      .nav-item>a {
+        padding: 10px 12px 12px 12px;
+        height: 40px;
+        margin: 3px 8px 3px 0;
+        border-radius: 0 20px 20px 0;
+        transition: background .3s ease-in-out;
+        color: #777;
+    } 
+}
+ */
+
+.brand-text {
+    font-family: Roboto, Helvetica Neue, Helvetica, Arial, sans-serif;
+    font-size: 22px;
+    font-weight: bold;
+    background: -webkit-linear-gradient(65deg, #09009f, #000000 80%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: #0000;
+    margin: 0;
+}
+
+.show {
+    display: none;
+}
+
+body {
+    /* overflow: hidden; */
+    overflow: scroll;
+}

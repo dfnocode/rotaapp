@@ -1,0 +1,855 @@
+var idCampoValor = "";
+var idCampoIPI = "";
+var idCampoST = "";
+var idCampoFrete = "";
+var idCampoData = "";
+var ehVendedor = false;
+var selectFormasPagamento = "";
+var formasPagamento = [];
+var dataVendaFocus = "";
+var exibirFormaPagamento;
+var historicoParcelas = [];
+var mostraEnviarPara = false;
+
+var FramePayment = function(options) {
+	this.afterChangeMethods = options['afterChangeMethods'];
+	initFramePagamento(options['showPaymentMethods'], options['afterLoad'], options['afterLoadParams'], options['type']);
+
+	Object.defineProperty(this, '_permissions', {
+		'value': Object.freeze($.extend({
+			'editPaymentMethod': true
+		}, options['permissions']))
+	});
+};
+FramePayment.prototype = Object.create({
+	'getPermission': function(permission) {
+		return this._permissions[permission];
+	},
+
+	'getInstallmentId': function(element) {
+		return parseInt($(element).attr('id').replace(/\D/g, ''), 10);
+	},
+
+	'getLastInstallmentId': function(elements) {
+		return parseInt(elements.eq(-1).attr('id').replace(/\D/g, ''), 10);
+	},
+
+	'getFullPrice': function() {
+		return nroUsaFloat($('#' + idCampoValor).val());
+	},
+
+	'getInstallmentPricesElements': function() {
+		return $('input[name="parcelas[valor][]"]');
+	},
+
+	'getInstallmentPrice': function(element) {
+		return nroUsaFloat($(element).val());
+	},
+
+	'getProportionalInstallmentPrice': function(elementCurrentPrice, proportionalFullPrice, difference) {
+		return (proportionalFullPrice != 0 ? toFixedFix(this.getInstallmentPrice(elementCurrentPrice) / proportionalFullPrice * difference, 2, true) : 0);
+	},
+
+	'getFullInstallmentPrices': function(installmentEditedId) {
+		var _this = this;
+		var prices = [];
+
+		prices['full'] = _this.getFullPrice();
+		prices['beforeInstallments'] = prices['currentInstallment'] = prices['afterInstallments'] = 0;
+
+		_this.getInstallmentPricesElements().each(function() {
+			var id = _this.getInstallmentId(this);
+			var price = _this.getInstallmentPrice(this);
+
+			if (id < installmentEditedId) {
+				prices['beforeInstallments'] += price;
+			} else if (id > installmentEditedId) {
+				prices['afterInstallments'] += price;
+			} else {
+				prices['currentInstallment'] = price;
+			}
+		});
+
+		return prices;
+	},
+
+	'getInstallments': function() {
+		var _this = this;
+		var installments = [];
+
+		$('#pag_grparcelas tr[id^=tr_]').each(function() {
+			installments.push(_this.getInstallment(_this.getInstallmentId(this)));
+		});
+
+		return installments;
+	},
+
+	'getInstallment': function(installmentNum) {
+		var fields = ['nroDias', 'dataVencimento', 'valor', 'idFormaPagamento', 'obs'];
+		var tr = $('#pag_grparcelas tr[id^=tr_' + installmentNum + ']');
+		var installment = { taxa: 0 },
+			paymentMethod = {};
+		fields.forEach(function(field) {
+			installment[field] = $('[name="parcelas[' + field + '][]"]', tr).val();
+		});
+		installment['dataVencimento'] = formatDate(installment['dataVencimento']);
+		installment['valor'] = parseFloat(nroUsa(installment['valor']));
+
+		if (paymentMethod = formasPagamento[installment['idFormaPagamento']]) {
+			installment['formaPagamento'] = paymentMethod;
+			installment['taxa'] = paymentMethod['aliquotaTaxa'] / 100 * installment['valor'] + paymentMethod['valorTaxa'];
+		}
+
+		return installment;
+	},
+
+	'getTotalTaxes': function() {
+		return this.getInstallments().reduce(function(totalTaxes, installment) {
+			return totalTaxes + installment['taxa'];
+		}, 0);
+	},
+
+	'fireEvent': function(eventName) {
+		if (this[eventName]) {
+			this[eventName]();
+		}
+	}
+});
+
+function initFramePagamento(exibirForma, callback, paramsCallback, tipo) {
+	exibirFormaPagamento = (exibirForma || $('#modulo').val() == 'PDV');
+	xajax_getFormasPagamento(function(opcoes) {
+		formas = opcoes['formas'];
+		if (exibirFormaPagamento == true) {
+			if (jQuery.isEmptyObject(formas)) {
+				$('#aviso_sem_forma').show();
+				$('.frame_pagamento').hide();
+			} else {
+				montarSelectFormasPagamento(formas, tipo);
+			}
+			initCondicaoAutoComplete(tipo);
+		}
+		initCategoriasSelect(desativarCategorias(opcoes['categorias'], tipo));
+		if (callback) {
+			callback(paramsCallback);
+		}
+	});
+
+	$('#pag_botaoCalcular, #btn_gerar_parcelas').unbind('click').on('click', function() {
+		btnGerarParcelas();
+		return false;
+	});
+
+	$('#pag_condicao').on('keydown', function(e) {
+		if (e.keyCode == 13) {
+			$('#pag_botaoCalcular, #btn_gerar_parcelas').trigger('click');
+		}
+	});
+}
+
+function btnGerarParcelas() {
+	$(this).blur();
+	$('#idFormaPagamento').val(0);
+	return gerarParcelasManualmente();
+}
+
+function initCategoriasSelect(categorias) {
+	$('#categoria').treeSelect({
+		data: $.extend(categorias, { 0: { id: 0, descricao: 'Sem categoria' } }),
+		onlyLeafSelectable: true,
+		maxSelectable: 1,
+		selected: [0],
+		onSelect: function(selected) {
+			$('#pag_categoria').val(selected[0]);
+		}
+	});
+}
+
+function initCondicaoAutoComplete(tipoForma) {
+	var termAtual = '';
+	var dados = [];
+	$("#pag_condicao").autocomplete({
+		source: function(request, response) {
+			if (tipoForma > 0) {
+				request.tipos = [tipoForma, 3];
+			}
+			if (termAtual == request.term) {
+				response(dados);
+			} else {
+				termAtual = request.term
+				$.getJSON('services/lookups.php?lookup=formasPagamento', request, function(data, status, xhr) {
+					data.sort(function(a, b) {
+						return a.value < b.value ? -1 : a.value > b.value ? 1 : 0;
+					});
+					response(dados = data);
+				});
+			}
+		},
+		select: function(event, ui) {
+			$.extend(formasPagamento[ui['item']['id']], {
+				'id': ui['item']['id'],
+				'modDestino': ui['item']['modDestino'],
+				'condicao': ui['item']['condicao'],
+				'idDestino': ui['item']['idDestino']
+			});
+			$('#idFormaPagamento').val(ui['item']['id']);
+			$('#pag_condicao').val(ui['item']['condicao']);
+			gerarParcelasManualmente();
+			return false;
+		},
+		fnRenderItemUi: UiAutocompleteItem.condition,
+		delay: 250,
+		minLength: 0,
+		selectOnly: true
+	}).click(function() {
+		if (!$(this).attr('readonly')) {
+			$(this).data("uiAutocomplete").search('%%');
+		}
+	});
+}
+
+function montarSelectFormasPagamento(formas, tipoForma) {
+	selectFormasPagamento = '<option value="0" style="display: none;" disabled="disabled">Nenhuma forma</option>';
+	var selected;
+	$.each(formas, function(key, forma) {
+		formasPagamento[forma['id']] = forma;
+		selected = false;
+		selectFormasPagamento += '<option ';
+		if ((tipoForma && forma['tipo'] != tipoForma && forma['tipo'] != 3) || forma['situacao'] == 0) {
+			selectFormasPagamento += 'style="display: none" disabled="disabled" class="desabilitado"';
+		} else {
+			selected = (forma['padrao'] == 1);
+		}
+		selectFormasPagamento += ' value="' + forma['id'] + '" codigoFiscal="' + forma['codigoFiscal'] + '" idDestino="' +
+			forma['idDestino'] + '" tband="' + forma['tband'] + '" ' + 'cnpjCredenciadora="' + forma['cnpjCredenciadora'] +
+			'" tpIntegra="' + forma['tpIntegra'] + '" ' + (selected ? 'selected="selected" ' : '') + '>' + forma['descricao'] + '</option>';
+	});
+}
+
+function setIdCampoValor(aIdCampoValor, campoIPI, campoST, frete) {
+	idCampoValor = aIdCampoValor;
+	if ((campoIPI != null) && (campoIPI != "")) {
+		idCampoIPI = campoIPI;
+	}
+	if ((campoST != null) && (campoST != "")) {
+		idCampoST = campoST;
+	}
+	if ((frete != null) && (frete != "")) {
+		idCampoFrete = frete;
+	}
+}
+
+function setIdCampoData(aIdCampoData) {
+	idCampoData = aIdCampoData;
+}
+
+function setLabelContaCreditoDebito(label, labelConta) {
+	$("#pag_conta > option").each(function() {
+		$(this).html($(this).html().replace("TIPO_CONTA", labelConta));
+		$(this).html($(this).html().replace("TIPO", label));
+	})
+}
+
+/*Rotinas para geração de parcelas*/
+function gerarParcelas() {
+	condicaoDiasDeferred = $.Deferred();
+	apagarParcelas();
+	$("#parcelaNumber").val(0);
+	if (parseFloat(nroUsa($("#" + idCampoValor).val())) > 0) {
+		var valorExtra = 0;
+		if (idCampoIPI != "") {
+			valorExtra += parseFloat(nroUsa($("#" + idCampoIPI).val()));
+		}
+		if (idCampoST != "") {
+			valorExtra += parseFloat(nroUsa($("#" + idCampoST).val()));
+		}
+		if (idCampoFrete != "") {
+			valorExtra += parseFloat(nroUsa($("#" + idCampoFrete).val()));
+		}
+		var valor = parseFloat(nroUsa($('#' + idCampoValor).val()));
+		var condicao = $('#pag_condicao').val();
+		var data = $('#' + idCampoData).val();
+		var idFormaPagamento = $('#idFormaPagamento').val();
+		utilizaDiasUteis = formasPagamento[idFormaPagamento] ? formasPagamento[idFormaPagamento]['utilizaDiasUteis'] : 0;
+
+		displayWait('pleasewait', true, 'Gerando parcelas, aguarde...');
+		xajax_obterVencimentoParcelas(condicao, data, utilizaDiasUteis, function(aDatas) {
+			createParcelas(aDatas, valor, valorExtra);
+			if (framePagamento.getInstallmentPricesElements().length > 0) {
+				$("#pag_parcelas, #pag_grparcelas").show();
+			} else {
+				$("#pag_parcelas, #pag_grparcelas").hide();
+			}
+			condicaoDiasDeferred.resolve();
+			closeWait('pleasewait');
+		});
+	}
+
+	return condicaoDiasDeferred.promise();
+}
+
+function gerarParcelasManualmente() {
+	var gerarParcelasDeferred = $.Deferred();
+
+	mostraEnviarPara = false;
+	if ($("#pag_condicao").val() == "") {
+		$("#pag_condicao").val("0");
+	}
+
+	if (parseFloat(nroUsa($("#" + idCampoValor).val())) == 0) {
+		createDialog({
+			'htmlTitle': 'Geração de parcelas',
+			'content': $('<div>', { 'class': 'container-fluid' }).append(
+				$('<div>', { 'class': 'alert-box alert-box-warning alert-box-transparent margin-top0' }).append(
+					$('<p>', { 'text': 'Não foi possível gerar as parcelas, pois o valor faturado está zerado.' })
+				)
+			),
+			'hideCancel': true,
+			'width': 440
+		});
+		gerarParcelasDeferred.resolve();
+	} else {
+		if ($('#' + idCampoData).val()) {
+			calcularParcelas().done(function() {
+				framePagamento.fireEvent('afterChangeMethods');
+				gerarParcelasDeferred.resolve();
+			});
+		}
+	}
+
+	return gerarParcelasDeferred.promise();
+}
+
+function createParcelas(aDatas, valorTotal, valorIPI) {
+	var portadorPadrao = null;
+	var formaPagamento = 1;
+	var resto, valor, parcelaNumber, novoTotal = 0;
+	aDatas = aDatas.slice(0, 50);
+	var nroParcelas = aDatas.length;
+	valor = (valorTotal - valorIPI) / nroParcelas;
+	valor = valor.toFixed(2);
+	resto = (valorTotal - (nroParcelas * valor));
+	for (var i = 0; i < nroParcelas; i++) {
+		if (i == 0) {
+			valorParcela = nroBra(parseFloat(valor) + parseFloat(valorIPI));
+		} else {
+			valorParcela = nroBra(valor);
+		}
+		novoTotal += parseFloat(nroUsa(valorParcela));
+		if (typeof $("#idIntegracaoPagamento") != 'undefined' && $("#id").val() == 0 && historicoParcelas.length == 0) {
+			portadorPadrao = $("#idIntegracaoPagamento").val();
+		}
+		if (portadorPadrao == null) {
+			if (typeof historicoParcelas[i] != 'undefined') {
+				portadorPadrao = historicoParcelas[i].conta;
+				formaPagamento = historicoParcelas[i].forma;
+			} else {
+				if (typeof $("#idIntegracaoPagamento") != 'undefined' && $("#id").val() == 0) {
+					portadorPadrao = $("#idIntegracaoPagamento").val();
+				}
+				portadorPadrao = null;
+			}
+		}
+		if ($('#idFormaPagamento').val() > 0) {
+			var id = $('#idFormaPagamento').val();
+			addParcela(0, $("#parcelaNumber").val(), aDatas[i]['nroDias'], aDatas[i]['dataVencimento'], valorParcela, formasPagamento[id].idDestino, "", formasPagamento[id].codigoFiscal, "", formasPagamento[id].id, formasPagamento[id]['tband'], formasPagamento[id]['cnpjCredenciadora'], formasPagamento[id]['tpIntegra'], formasPagamento[id].modDestino);
+		} else {
+			addParcela(0, $("#parcelaNumber").val(), aDatas[i]['nroDias'], aDatas[i]['dataVencimento'], valorParcela, portadorPadrao, "", formaPagamento);
+		}
+		parcelaNumber = $("#parcelaNumber").val();
+		parcelaNumber++;
+		portadorPadrao = null;
+		$("#parcelaNumber").val(parcelaNumber);
+	}
+	if (novoTotal != parseFloat(valorTotal)) {
+		if ($("#parcelaNumber").val() > 0) {
+			var dif = nroBra(parseFloat(nroUsa($("#valor0").val())) + parseFloat(valorTotal) - novoTotal);
+			$("#valor0").val(dif);
+		}
+	}
+}
+
+function addParcela(id, aNumeroParcela, nroDias, dataVencimento, aValor, aContaContabil, aObs, forma, nroBanco, idFormaPagamento, tband, cnpj, tpIntegra, destino) {
+	if (!aObs) {
+		aObs = "";
+	}
+	if (!nroBanco || nroBanco == undefined) {
+		nroBanco = "";
+	}
+
+	var linha = montarHtmlParcela(id, aNumeroParcela, nroDias, dataVencimento, aValor, aObs, nroBanco, tband, cnpj, tpIntegra, destino);
+
+	if (aNumeroParcela > 1) {
+		beforeElement = "tr_" + (aNumeroParcela - 1);
+		$(linha).insertAfter($("#" + beforeElement));
+	} else {
+		beforeElement = "pag_trh";
+		$(linha).insertBefore($("#" + beforeElement));
+	}
+
+	if (idFormaPagamento > 0) {
+		$("#idFormaPagamento" + aNumeroParcela).val(idFormaPagamento);
+	} else if (idFormaPagamento == 0) {
+		$("#idFormaPagamento" + aNumeroParcela).val(0);
+	}
+	$("#selectForma" + aNumeroParcela).val(forma);
+	clonarContaContabil(aNumeroParcela, aContaContabil);
+	$("#nroDias" + aNumeroParcela).attr("name", "parcelas[nroDias][]");
+	$("#dataVencimento" + aNumeroParcela).attr("name", "parcelas[dataVencimento][]");
+	$("#valor" + aNumeroParcela).attr("name", "parcelas[valor][]");
+	$("#pag_conta" + aNumeroParcela).attr("name", "parcelas[conta][]");
+	$("#obs" + aNumeroParcela).attr("name", "parcelas[obs][]");
+	$('#idParcela' + aNumeroParcela).attr("name", "parcelas[id][]");
+
+	$("#nroDias" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+	$("#dataVencimento" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+	$("#valor" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+	$("#valor" + aNumeroParcela).bind("blur", function() { recalcularParcelasAbaixo(aNumeroParcela); });
+	$("#nroDias" + aNumeroParcela).bind("change", function() { addDiasNew($(this).val(), "dataVencimento" + aNumeroParcela, idCampoData); });
+	$("#exclui" + aNumeroParcela).bind("click", function() { removeParcela(aNumeroParcela); });
+	$("#dataVencimento" + aNumeroParcela).bind("change", function() { diferencaDatas("d", $("#" + idCampoData).val(), $(this).val(), "nroDias" + aNumeroParcela); });
+	$("#pag_conta" + aNumeroParcela).on("change", function() { alterarForma(this); });
+	$("#idFormaPagamento" + aNumeroParcela).on("change", function() { alterarForma(this) });
+	$("#pag_conta" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+	$("#obs" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+
+	var controleMesas = $("#modulo").val() == "ControleMesas" || $("#modulo").val() == "PDV";
+	$(".cupom").hide();
+	$(".controleMesas").hide();
+	if (exibirFormaPagamento == true) {
+		$(".cupom").show();
+	} else if (controleMesas) {
+		$(".controleMesas").show();
+	}
+	alterarFormaPagamento(aNumeroParcela, (idFormaPagamento == undefined || idFormaPagamento == 0) && (exibirFormaPagamento || controleMesas));
+	initFormatterField(2, $("#valor" + aNumeroParcela));
+	$('.tdFormasPagamento select option.desabilitado').hide();
+}
+
+function alterarFormaPagamento(nro, atualizarAtributos) {
+	if (mostraEnviarPara) {
+		$('#str_frame_pagamento_formas').hide();
+		$('.tdFormasPagamento').remove();
+	} else {
+		atualizarAtributos = (atualizarAtributos == undefined ? true : atualizarAtributos)
+		var elem = $('#idFormaPagamento' + nro + ' option:selected');
+
+		var formaPagamento = formasPagamento[elem.val()];
+		$("#pag_conta" + nro).show();
+		if (formaPagamento) {
+			if (formaPagamento['modDestino'] != 0) {
+				$("#pag_conta" + nro).hide();
+			}
+			if (atualizarAtributos) {
+				$('#pag_conta' + nro).val(elem.attr('idDestino'));
+				$('#selectForma' + nro).val(elem.attr('codigoFiscal'));
+				$('#tband' + nro).val(elem.attr('tband'));
+				$('#cnpjCredenciadora' + nro).val(elem.attr('cnpjCredenciadora'));
+				$('#tpIntegra' + nro).val(elem.attr('tpIntegra'));
+				$('#destino' + nro).val(formaPagamento['modDestino']);
+			}
+		}
+	}
+
+	$('#pag_grparcelas td[id^=conta], #str_frame_pagamento_enviar_para').hide();
+	if (showColunaEnviarPara()) {
+		if ($("#pag_grparcelas select[id^='pag_conta']").filter(function() { return $(this).css("display") == "block" }).length > 0) {
+			$('#pag_grparcelas td[id^=conta], #str_frame_pagamento_enviar_para').show();
+		}
+	}
+}
+
+function alterarForma(element) {
+	if ($(element).attr('id').indexOf('idFormaPagamento') != -1) {
+		var data = { 'id': 'idFormaPagamento', 'descricao': 'todas as formas de pagamento' };
+	} else if ($(element).attr('id').indexOf('pag_conta') != -1) {
+		var data = { 'id': 'pag_conta', 'descricao': 'todos os destinos' };
+	}
+
+	if ($('#pag_grparcelas [id^=' + data.id + ']:visible').length > 1) {
+		createDialog({
+			'content': $('<div>', { 'class': 'container-fluid' }).append(
+				$('<div>', { 'class': 'alert-box alert-box-question margin-top0' }).append(
+					$('<p>', { 'html': 'Deseja alterar ' + data.descricao + ' das parcelas para <b>' + $(element).find(':selected').text() + '</b>?' })
+				)
+			),
+			'htmlTitle': 'Alterar parcelas',
+			'width': 440,
+			'textOk': 'Sim',
+			'textCancelar': 'Não',
+			'fnOk': function() {
+				$('#pag_grparcelas [id^=' + data.id + ']:visible').val($(element).find(':selected').val());
+
+				if (data.id == 'idFormaPagamento') {
+					$.each($('#pag_grparcelas [id^=' + data.id + ']:visible'), function(i, el) {
+						alterarFormaPagamento($(el).attr('id').replace('idFormaPagamento', ''));
+					});
+				}
+				framePagamento.fireEvent('afterChangeMethods');
+			},
+			'fnCancelar': function() {
+				framePagamento.fireEvent('afterChangeMethods');
+			}
+		});
+	} else {
+		framePagamento.fireEvent('afterChangeMethods');
+	}
+}
+
+function retiraEspacos(parcela) {
+	while (parcela.indexOf(" ") > -1) {
+		parcela = parcela.replace(' ', '');
+	}
+	return parcela;
+}
+
+/*Rotinas para exclusão de parcelas*/
+function apagarParcelas() {
+	historicoParcelas = []
+	var i = 0;
+	$("#pag_grparcelas > tbody > tr").each(function() {
+		if (($(this).attr("id") != "pag_trh") && ($(this).attr("id") != "pag_parcelas_header")) {
+			historicoParcelas.push({ 'conta': $("#pag_conta" + i).val(), 'forma': $("#idFormaPagamento" + i).val() });
+			$(this).remove();
+			i++;
+		}
+	})
+}
+
+function removeParcela(np) {
+	$("#tr_" + np).remove();
+
+	if (np != "0") {
+		var valorExtra = 0;
+		if (idCampoIPI != "") {
+			valorExtra += parseFloat(nroUsa($("#" + idCampoIPI).val()));
+		}
+		if (idCampoST != "") {
+			valorExtra += parseFloat(nroUsa($("#" + idCampoST).val()));
+		}
+		if (idCampoFrete != "") {
+			valorExtra += parseFloat(nroUsa($("#" + idCampoFrete).val()));
+		}
+		if (($("#parcelaNumber").val() > 0) && (valorExtra > 0)) {
+			var valorPrimParc = nroBra(parseFloat(nroUsa($("#valor0").val())) - valorExtra);
+			$("#valor0").val(valorPrimParc);
+		}
+	}
+	atualizarParcelas();
+
+	$('#pag_aNovaLinhaParcela, #pag_parcelas')[framePagamento.getInstallmentPricesElements().length > 0 ? 'show' : 'hide']();
+	framePagamento.fireEvent('afterChangeMethods');
+}
+
+/*Rotinas para clonar contas contábeis*/
+function clonarContaContabil(aNumeroParcela, aContaContabil) {
+	$("#pag_conta").val(aContaContabil ? aContaContabil : -1);
+	$("#pag_conta").clone(true).appendTo($("#conta" + aNumeroParcela)).attr("id", "pag_conta" + aNumeroParcela).attr("name", "pag_conta" + aNumeroParcela).val($("#pag_conta").val()).css("border", "none");
+}
+
+function adicionarLinhaParcela() {
+	var nroParcela = $("#parcelaNumber").val();
+	var aNumeroParcela = nroParcela;
+
+	var linha = montarHtmlParcela(0, aNumeroParcela, '', '', '0,00', '', '', '', '', '', '');
+
+	$(linha).insertBefore($("#pag_trh"));
+
+	clonarContaContabil(aNumeroParcela, null);
+
+	$("#nroDias" + aNumeroParcela).attr("name", "parcelas[nroDias][]");
+	$("#dataVencimento" + aNumeroParcela).attr("name", "parcelas[dataVencimento][]");
+	$("#valor" + aNumeroParcela).attr("name", "parcelas[valor][]");
+	$("#pag_conta" + aNumeroParcela).attr("name", "parcelas[conta][]");
+	$("#obs" + aNumeroParcela).attr("name", "parcelas[obs][]");
+
+	$("#nroDias" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+	$("#dataVencimento" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+	$("#valor" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+	$("#valor" + aNumeroParcela).bind("blur", function() { recalcularParcelasAbaixo(aNumeroParcela); });
+	$("#obs" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+	$("#conta" + aNumeroParcela).bind("blur", function() { terribleHack(this); });
+	$("#nroDias" + aNumeroParcela).bind("change", function() { addDiasNew($(this).val(), "dataVencimento" + aNumeroParcela, idCampoData); });
+	$("#pag_conta" + aNumeroParcela).on("change", function() { alterarForma(this) });
+	$("#idFormaPagamento" + aNumeroParcela).on("change", function() { alterarForma(this) });
+	$("#exclui" + aNumeroParcela).bind("click", function() { removeParcela(aNumeroParcela); });
+	$("#dataVencimento" + aNumeroParcela).bind("change", function() { diferencaDatas("d", $("#" + idCampoData).val(), $(this).val(), "nroDias" + aNumeroParcela); });
+
+	initFormatterField(2, $("#valor" + aNumeroParcela));
+
+	nroParcela++;
+	$("#parcelaNumber").val(nroParcela);
+
+	if (exibirFormaPagamento == true) {
+		alterarFormaPagamento(aNumeroParcela);
+		$(".cupom").show();
+	} else if ($("#modulo").val() == "ControleMesas" || $("#modulo").val() == "PDV") {
+		$(".controleMesas").show();
+	}
+}
+
+function montarHtmlParcela(id, aNumeroParcela, nroDias, dataVencimento, aValor, aObs, nroBanco, tband, cnpj, tpIntegra, destino) {
+	var linha = "<tr id=tr_" + aNumeroParcela + ">" +
+		"<td><input type='text' class='editgrid' id=nroDias" + aNumeroParcela + " value=" + nroDias + "></td>" +
+		"<td><input type='text' class='editgrid' id=dataVencimento" + aNumeroParcela + " onchange='formatDateField(this);' value=" + dataVencimento + "></td>" +
+		"<td><input type='text' class='editgrid' id=valor" + aNumeroParcela + " value=" + aValor + "></td>" +
+		'<td style="display:none;"><input type="hidden" id="selectForma' + aNumeroParcela + '" value="1" name="parcelas[forma][]" /></td>';
+	if ($("#modulo").val() == "ControleMesas" || $("#modulo").val() == "PDV" || exibirFormaPagamento == true) {
+		linha += '<td class="tdFormasPagamento cupom controleMesas">' +
+			'<select id="idFormaPagamento' + aNumeroParcela + '" name="parcelas[idFormaPagamento][]" class="wh100 browser-default" style="border: none;"' + (framePagamento.getPermission('editPaymentMethod') ? '' : ' readonly="readonly"') + ' onchange="alterarFormaPagamento(' + aNumeroParcela + ');">' + selectFormasPagamento + '</select>' +
+			'</td>';
+	} else {
+		var idFormaPagamentoPadrao = 0;
+		if (!jQuery.isEmptyObject(formasPagamento)) {
+			idFormaPagamentoPadrao = Object.keys(formasPagamento)[0];
+		}
+		linha += '<td class="tdFormasPagamento cupom"><input type="hidden" value=' + idFormaPagamentoPadrao + ' id="idFormaPagamento' + aNumeroParcela + '" name="parcelas[idFormaPagamento][]" /></td>';
+	}
+	if (!showColunaEnviarPara()) {
+		linha += "<td style='display:none' id=conta" + aNumeroParcela + "></td>";
+	} else {
+		linha += "<td id=conta" + aNumeroParcela + "></td>";
+	}
+
+	if ($("#modulo").val() != "ControleMesas") {
+		linha += "<td class='" + ($('#modulo').val() != "PDV" ? 'hidden-xs' : '') + "'><input type='text' class='editgrid ' id=obs" + aNumeroParcela + " value='" + aObs + "'></td>";
+	}
+
+	linha += "<input type='hidden' id=nroBanco" + aNumeroParcela + " value='" + nroBanco + "' name='parcelas[nroBanco][]'>";
+	linha += '<input type="hidden" id="tband' + aNumeroParcela + '" value="' + tband + '" name="parcelas[tband][]">';
+	linha += '<input type="hidden" id="cnpjCredenciadora' + aNumeroParcela + '" value="' + cnpj + '" name="parcelas[cnpj][]">';
+	linha += '<input type="hidden" id="tpIntegra' + aNumeroParcela + '" value="' + tpIntegra + '" name="parcelas[tpIntegra][]">';
+	linha += '<input type="hidden" id="destino' + aNumeroParcela + '" value="' + destino + '" name="parcelas[destino][]">';
+
+	if ($("#modulo").val() != "PDV") {
+		linha += '<td><a title="Ver detalhes" onclick="visualizarParcela(' + aNumeroParcela + ')"><span class="fas fa-info-circle"></span></a></td>';
+	}
+
+	linha += '<td style="display:none;"><input type="text" class="editgrid" id=idParcela' + aNumeroParcela + ' value=' + id + '></td>';
+
+	linha += '<td id="exclui' + aNumeroParcela + '">' +
+		'<a title="Remover parcela"><span class="fas fa-trash-alt"></span></a>' +
+		'</td></tr>';
+
+	return linha;
+}
+
+function showColunaEnviarPara() {
+	return ($.inArray($('#modulo').val(), ['Notas Servico', 'OrdemServico', 'VendasBalcao', 'PedidosCompra']) != -1);
+}
+
+function atualizarParcelas() {
+	if ($('#parcelaNumber').val() != '' || $('#parcelaNumber').val() != '0') {
+		var totalTransacao = framePagamento.getFullPrice();
+		var total = 0;
+		var valoresParcela = $('input[name="parcelas[valor][]"]');
+		var somaTotalParcelas = 0;
+		var valorExtra = 0;
+
+		if (valoresParcela.length > 0) {
+			for (var i = 0; i < valoresParcela.length; i++) {
+				total += parseFloat(nroUsa(valoresParcela[i].value));
+			}
+			$.each([idCampoIPI, idCampoST, idCampoFrete], function() {
+				if ($.trim(this) != '') {
+					valorExtra += nroUsaFloat($('#' + this).val());
+				}
+			});
+			var valorExtraOriginal = 0;
+			if (valorExtra > 0) {
+				valorExtraOriginal = totalTransacao - total;
+			}
+
+			var multiplicador = totalTransacao - valorExtraOriginal;
+
+			for (var i = 0; i < valoresParcela.length; i++) {
+				if (total == 0) {
+					valoresParcela[i].value = 0;
+				} else {
+					valoresParcela[i].value = nroBra((((nroUsaFloat(valoresParcela[i].value) - valorExtraOriginal) / total * multiplicador) + valorExtra).toFixed(2));
+					valorExtraOriginal = 0;
+					valorExtra = 0; // Somado apenas na primeira parcela
+					somaTotalParcelas += nroUsaFloat(valoresParcela[i].value);
+				}
+			}
+
+			var diferenca = totalTransacao - somaTotalParcelas;
+			valoresParcela[0].value = nroBra(nroUsaFloat(valoresParcela[0].value) + parseFloat(diferenca.toFixed(2)));
+		}
+	}
+}
+
+/*Rotina executada na edição*/
+function addDetailsParcelas(parcelas, temFormaPagamento, atualizaDataVencimento) {
+	if (temFormaPagamento != undefined) {
+		mostraEnviarPara = !temFormaPagamento;
+	}
+	apagarParcelas();
+	var proxParcela = 0;
+	if (parcelas && parcelas.length) {
+		$.each(parcelas, function(nro, item) {
+			var dataVencimento = item.dataVencimento;
+			if (atualizaDataVencimento) {
+				var dataBase = new Date(formatdate($("#" + idCampoData).val()));
+				dataVencimento = somaDias(item.nroDias, dataBase);
+			}
+			addParcela(item.id, nro, item.nroDias, dataVencimento, item.valor, item.conta, item.obs, item.forma, item.nroBanco, item.idFormaPagamento, item.tband, item.cnpj, item.tpIntegra, item.destino);
+			proxParcela++;
+		});
+		$("#parcelaNumber").val(proxParcela);
+		$("#pag_parcelas").show();
+		$("#pag_grparcelas").show();
+	}
+}
+
+/*Rotina executada pelo botao "Calcular parcelas"*/
+function calcularParcelas() {
+	return gerarParcelas();
+}
+
+function salvarParcelas() {
+	if ($("#pag_parcelas").css("display") == "none") {
+		gerarParcelas();
+	}
+}
+
+function recalcularParcelasAbaixo(idParcelaEditada) {
+	var valorParcela, novoTotal, diferenca, parcelaAjusteDiferenca;
+	var totais = framePagamento.getFullInstallmentPrices(idParcelaEditada);
+
+	if (framePagamento.getLastInstallmentId(framePagamento.getInstallmentPricesElements()) != idParcelaEditada) {
+		novoTotal = totais['beforeInstallments'] + totais['currentInstallment'];
+		diferenca = totais['full'] - totais['currentInstallment'] - totais['beforeInstallments'];
+
+		framePagamento.getInstallmentPricesElements().each(function() {
+			if (framePagamento.getInstallmentId(this) > idParcelaEditada) {
+				valorParcela = framePagamento.getProportionalInstallmentPrice(this, totais['afterInstallments'], diferenca);
+				$(this).val(nroBra(valorParcela));
+				novoTotal += valorParcela;
+			}
+		});
+
+		parcelaAjusteDiferenca = framePagamento.getInstallmentPricesElements().eq(-1);
+	} else {
+		novoTotal = totais['currentInstallment'];
+		diferenca = totais['full'] - totais['currentInstallment'];
+
+		framePagamento.getInstallmentPricesElements().each(function() {
+			if (framePagamento.getInstallmentId(this) < idParcelaEditada) {
+				valorParcela = framePagamento.getProportionalInstallmentPrice(this, totais['beforeInstallments'], diferenca);
+				$(this).val(nroBra(valorParcela));
+				novoTotal += valorParcela;
+			}
+		});
+
+
+		parcelaAjusteDiferenca = framePagamento.getInstallmentPricesElements().eq(0);
+	}
+
+	diferenca = totais['full'] - novoTotal;
+	parcelaAjusteDiferenca.val(nroBra(framePagamento.getInstallmentPrice(parcelaAjusteDiferenca) + diferenca));
+	framePagamento.fireEvent('afterChangeMethods');
+}
+
+function limparParcelas() {
+	apagarParcelas();
+	$("#parcelaNumber").val(0);
+	$("#pag_parcelas").hide();
+	$("#pag_grparcelas").hide();
+}
+
+function existeParcelas() {
+	return ($("#pag_grparcelas > tbody > tr[id^='tr_']").length > 0);
+}
+
+function bindDataVendaAlterada(campoData) {
+	campoData.on('focus', function() {
+		dataVendaFocus = $(this).val();
+	});
+
+	campoData.on('change', function() {
+		if (existeParcelas()) {
+			var funcRetonaData = function() {
+				campoData.val(dataVendaFocus);
+			};
+
+			showDialogMessage({
+				'status': 'info',
+				'description': 'As datas e valores das suas parcelas serão recalculadas',
+				'htmlTitle': 'Pagamento',
+				'hideCancel': false,
+				'fnOk': function() {
+					gerarParcelasManualmente();
+				},
+				'fnCancelar': function() {
+					funcRetonaData();
+				},
+				'fnBeforeClose': function() {
+					funcRetonaData();
+				}
+			});
+		}
+	});
+}
+
+function visualizarParcela(numeroParcela) {
+	var dialog = {
+		config: {
+			title: 'Dados da parcela',
+			width: getMobileWidthForDialogs(648),
+			open: ajustarFormDetalhesParcela(numeroParcela)
+		},
+		content: $('#dados_parcela'),
+		hideOk: true,
+		hideCancel: true,
+		textCancelar: 'Fechar'
+	};
+	createDialog(dialog);
+}
+
+function ajustarFormDetalhesParcela(numeroParcela) {
+	var valorEp = nroUsa($('#valor' + numeroParcela).val());
+	$('#nroDiasEP').val($('#nroDias' + numeroParcela).val()).prop('readonly', true);
+	$('#dataVencimentoEP').val($('#dataVencimento' + numeroParcela).val()).prop('readonly', true);
+	$('#valorEP').val(nroBra(valorEp)).prop('readonly', true);
+	$('#formaPagamentoEP').val($('#idFormaPagamento' + numeroParcela + ' option:selected').text()).prop('readonly', true);
+	var destino = $('#pag_conta' + numeroParcela + ' option:selected').text();
+	switch (parseInt($('#destino' + numeroParcela).val())) {
+		case 1:
+			destino = 'Contas a receber/pagar - ' + destino;
+			break;
+		case 2:
+			destino = 'Ficha financeira';
+			break;
+		case 3:
+			destino = 'Caixas e bancos - ' + destino;
+			break;
+	}
+	$('#pag_contaEP').val(destino).prop('readonly', true);
+	$('#obsEP').val($('#obs' + numeroParcela).val()).prop('readonly', true);
+	var codigoFiscal = $('#selectForma' + numeroParcela).val();
+	$('#selectFormaEP').val(infoFormas.codigoFiscal[codigoFiscal]).prop('readonly', true);
+	$('#tpIntegraEP').val(infoFormas.tpIntegra[$('#tpIntegra' + numeroParcela).val()]).prop('readonly', true);
+	$('#cnpjCredenciadoraEP').val(aplicarMascara($('#cnpjCredenciadora' + numeroParcela).val(), { 'mask': 'cnpjcpf' })).prop('readonly', true);
+	$('#tbandEP').val(infoFormas.tband[$('#tband' + numeroParcela).val()]).prop('readonly', true);
+	if (codigoFiscal == 3 || codigoFiscal == 4) {
+		$('#tpIntegraEP').parent().show();
+		$('#cnpjCredenciadoraEP').parent().show();
+		$('#tbandEP').parent().show();
+	} else {
+		$('#tpIntegraEP').parent().hide();
+		$('#cnpjCredenciadoraEP').parent().hide();
+		$('#tbandEP').parent().hide();
+	}
+	if (exibirFormaPagamento) {
+		var idFormaPagamento = $('#idFormaPagamento' + numeroParcela + ' option:selected').val();
+		var formaPagamento = formasPagamento[idFormaPagamento];
+		if (formaPagamento) {
+			$('#valorTaxaEP').val(nroBra((formaPagamento['aliquotaTaxa'] / 100 * valorEp + formaPagamento['valorTaxa']).toFixed(2))).prop('readonly', true);
+		} else {
+			$('#valorTaxaEP').val('0,00').prop('readonly', true);
+		}
+	} else {
+		$('#valorTaxaEP').parent().hide();
+	}
+}
