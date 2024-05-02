@@ -6,7 +6,7 @@
 
         private $username  =   "root";
         
-        private $password  =   "root";
+        private $password  =   "";
         
         private $db        =   "rotadb24";
  

@@ -4,7 +4,21 @@
 
 //PDF DO PEDIDO
 require_once '../dompdf/autoload.inc.php';
-include "../../../../../wp-load.php";
+//include "../../../../../wp-load.php";
+function converteDinheiro($num)
+{
+  $str = (string)$num;
+  //echo $str;
+
+  $ntotal = number_format($str, 2);
+  $stotal = (string)$ntotal;
+  $arrTotal = explode(".", $stotal);
+  $esquerdo = $arrTotal[0];
+  $esquerdo = str_replace(",", ".", $esquerdo);
+  $direito = $arrTotal[1];
+  $final = $esquerdo . ',' . $direito;
+  return trim($final);
+}
 
 
 use Dompdf\Dompdf;
