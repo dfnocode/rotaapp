@@ -372,7 +372,7 @@
                     </ul>
                 </li>
                 <li class="nav-item has-treeview">
-                    <a href="/../../wp-login.php?action=logout" class="nav-link">
+                    <a href="../../login/auth/logout.php" class="nav-link">
                         <i class="nav-icon fas fa-sign-out-alt"></i>
                         <p>
                             Sair
