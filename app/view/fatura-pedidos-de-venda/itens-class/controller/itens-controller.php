@@ -1,7 +1,14 @@
 
 <?php
-
+  #[AllowDynamicProperties]
     class ItensController {
+        
+        /* public function __set(string $conn, mixed $value): void {
+            $this->{$conn} = $value;
+        } */
+        /* public function __set(string $numero, mixed $value): void {
+            $this->{$numero} = $value;
+        } */
     	// constructor
     	function __construct($conn, $numero) {
     		$this->conn = $conn;

@@ -5,20 +5,6 @@
 //PDF DO PEDIDO
 require_once '../dompdf/autoload.inc.php';
 //include "../../../../../wp-load.php";
-function converteDinheiro($num)
-{
-  $str = (string)$num;
-  //echo $str;
-
-  $ntotal = number_format($str, 2);
-  $stotal = (string)$ntotal;
-  $arrTotal = explode(".", $stotal);
-  $esquerdo = $arrTotal[0];
-  $esquerdo = str_replace(",", ".", $esquerdo);
-  $direito = $arrTotal[1];
-  $final = $esquerdo . ',' . $direito;
-  return trim($final);
-}
 
 
 use Dompdf\Dompdf;
@@ -35,11 +21,11 @@ $options->setIsRemoteEnabled(true);
   ob_start(); 
 
 
-	require_once './config/db-config.php'; 
+	require_once 'config/db-config.php'; 
 	
 	$db = new DBController();
 	$conn = $db->connect();
-    require_once './controller/itens-controller.php';
+    require_once 'controller/itens-controller.php';
     $num_pedido = $_GET['n'];
 
 	$dCtrl  = new ItensController($conn, $num_pedido);
@@ -339,7 +325,7 @@ $dadosPedido = dados_do_pedido($conexao, $num_pedido);
         $pdf = $dompdf->output();
         $pdf_name = $namefile;
 
-        $file_location = $_SERVER['DOCUMENT_ROOT']."/sys/app/view/fatura-pedidos-de-venda/pdfReports/".$pdf_name;
+        $file_location = $_SERVER['DOCUMENT_ROOT']."/rotaapp/app/view/fatura-pedidos-de-venda/pdfReports/".$pdf_name;
         //echo $file_location;
 
         file_put_contents($file_location,$pdf); 
