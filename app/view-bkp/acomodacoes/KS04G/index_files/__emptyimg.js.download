@@ -1,1 +1,0 @@
-define(["hogan"],function(h){arguments[0]={"__emptyimg":h.compile("<i class=\"fa fa-camera emptyimg\"></i>")};return Object.assign.apply(null, arguments)});

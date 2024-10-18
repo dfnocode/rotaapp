@@ -1,1 +1,0 @@
-define(["api!core._getUser","lodash"],(function(e,n){return(e=n.cloneDeep(e))._t_permissions=new Set(e.permissions),function(){for(var r=arguments.length,s=new Array(r),t=0;t<r;t++)s[t]=arguments[t];return s.some((function(r){return 1===r.length?e._t_permissions.has(r[0]):n.intersection(e.permissions,r).length===r.length}))}}));

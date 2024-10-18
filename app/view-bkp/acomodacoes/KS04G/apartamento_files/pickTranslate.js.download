@@ -1,1 +1,0 @@
-define("pickTranslate",[],(function(){return function(n,e){return void 0===e&&(e=window._user.language),n&&(e&&n[e]||n[window.__defaultLang]||Object.values(n).filter(Boolean)[0])||""}}));

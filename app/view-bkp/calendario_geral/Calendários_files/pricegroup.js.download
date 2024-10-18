@@ -1,1 +1,0 @@
-define(["hogan"],function(h){arguments[0]={"autocomplete/pricegroup":h.compile("{{#items}}\n<option value=\"{{_id}}\" data-_idbuilding=\"{{_idbuilding}}\" {{#multiple}}data-content=\"<span class='label label-default'>{{name}}</span>\"{{/multiple}} data-subtext=\"{{avatar}}\">{{name}}</option>\n{{/items}}")};return Object.assign.apply(null, arguments)});
